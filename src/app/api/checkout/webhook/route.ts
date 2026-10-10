@@ -47,10 +47,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let event: any;
+    interface RazorpayCapturedPayment {
+      id?: string;
+      qr_code_id?: string;
+      status?: string;
+      currency?: string;
+      amount?: number;
+    }
+
+    interface RazorpayWebhookEvent {
+      event?: string;
+      payload?: {
+        payment?: {
+          entity?: RazorpayCapturedPayment;
+        };
+      };
+    }
+
+    let event: RazorpayWebhookEvent;
 
     try {
-      event = JSON.parse(rawBody);
+      event = JSON.parse(rawBody) as RazorpayWebhookEvent;
     } catch {
       return NextResponse.json(
         { error: "Invalid JSON payload." },
@@ -69,6 +86,7 @@ export async function POST(request: NextRequest) {
       !payment ||
       payment.status !== "captured" ||
       payment.currency !== "INR" ||
+      typeof payment.amount !== "number" ||
       !Number.isSafeInteger(payment.amount) ||
       payment.amount <= 0 ||
       typeof payment.id !== "string" ||

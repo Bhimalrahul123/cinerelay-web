@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import MessageNotifications from "@/components/MessageNotifications";
@@ -52,34 +52,42 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
-  const loadListings = useCallback(async () => {
-    setLoading(true);
-    setErrorMessage("");
-
-    const { data, error } = await supabase
-      .from("listings")
-      .select(
-        "id, title, category, venue, location, price, description, event_date, event_time, status, created_at"
-      )
-      .eq("status", "approved")
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      console.error("Failed to load listings:", error);
-      setErrorMessage(
-        "We couldn't load listings right now. Please try again."
-      );
-      setListings([]);
-    } else {
-      setListings((data ?? []) as Listing[]);
-    }
-
-    setLoading(false);
-  }, []);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    void loadListings();
-  }, [loadListings]);
+    let active = true;
+
+    async function fetchListings() {
+      const { data, error } = await supabase
+        .from("listings")
+        .select(
+          "id, title, category, venue, location, price, description, event_date, event_time, status, created_at"
+        )
+        .eq("status", "approved")
+        .order("created_at", { ascending: false });
+
+      if (!active) return;
+
+      if (error) {
+        console.error("Failed to load listings:", error);
+        setErrorMessage(
+          "We couldn't load listings right now. Please try again."
+        );
+        setListings([]);
+      } else {
+        setErrorMessage("");
+        setListings((data ?? []) as Listing[]);
+      }
+
+      setLoading(false);
+    }
+
+    void fetchListings();
+
+    return () => {
+      active = false;
+    };
+  }, [reloadKey]);
 
   const filteredListings = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -288,7 +296,10 @@ export default function HomePage() {
             <p>{errorMessage}</p>
             <button
               type="button"
-              onClick={() => void loadListings()}
+              onClick={() => {
+                setLoading(true);
+                setReloadKey((k) => k + 1);
+              }}
               className="mt-3 font-bold underline"
             >
               Try again

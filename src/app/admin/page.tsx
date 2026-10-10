@@ -1,7 +1,9 @@
 
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 type Listing = {
@@ -19,82 +21,95 @@ type Listing = {
 };
 
 export default function AdminPage() {
+  const router = useRouter();
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
   const [workingId, setWorkingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
-
-  const loadListings = useCallback(async () => {
-    setLoading(true);
-    setMessage("");
-
-    try {
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser();
-
-      if (authError || !user) {
-        window.location.href = "/auth?mode=login";
-        return;
-      }
-
-      const { data, error } = await supabase.rpc(
-        "admin_get_pending_listings"
-      );
-
-      if (error) throw error;
-
-      const pendingRows = (data ?? []) as Omit<
-        Listing,
-        "evidence_url"
-      >[];
-
-      // Create short-lived signed URLs for private ticket images.
-      const rowsWithImages = await Promise.all(
-        pendingRows.map(async (listing) => {
-          if (!listing.evidence_path) {
-            return { ...listing, evidence_url: null };
-          }
-
-          const { data: signedData, error: signedError } =
-            await supabase.storage
-              .from("ticket-evidence")
-              .createSignedUrl(listing.evidence_path, 300);
-
-          if (signedError) {
-            console.error(
-              "Could not create ticket preview URL:",
-              signedError.message
-            );
-            return { ...listing, evidence_url: null };
-          }
-
-          return {
-            ...listing,
-            evidence_url: signedData.signedUrl,
-          };
-        })
-      );
-
-      setIsAdmin(true);
-      setListings(rowsWithImages);
-    } catch (error) {
-      setIsAdmin(false);
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "Unable to load admin listings."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    void loadListings();
-  }, [loadListings]);
+    let active = true;
+
+    async function fetchAdminListings() {
+      try {
+        const {
+          data: { user },
+          error: authError,
+        } = await supabase.auth.getUser();
+
+        if (!active) return;
+
+        if (authError || !user) {
+          router.push("/auth?mode=login");
+          return;
+        }
+
+        const { data, error } = await supabase.rpc(
+          "admin_get_pending_listings"
+        );
+
+        if (!active) return;
+        if (error) throw error;
+
+        const pendingRows = (data ?? []) as Omit<
+          Listing,
+          "evidence_url"
+        >[];
+
+        // Create short-lived signed URLs for private ticket images.
+        const rowsWithImages = await Promise.all(
+          pendingRows.map(async (listing) => {
+            if (!listing.evidence_path) {
+              return { ...listing, evidence_url: null };
+            }
+
+            const { data: signedData, error: signedError } =
+              await supabase.storage
+                .from("ticket-evidence")
+                .createSignedUrl(listing.evidence_path, 300);
+
+            if (signedError) {
+              console.error(
+                "Could not create ticket preview URL:",
+                signedError.message
+              );
+              return { ...listing, evidence_url: null };
+            }
+
+            return {
+              ...listing,
+              evidence_url: signedData.signedUrl,
+            };
+          })
+        );
+
+        if (!active) return;
+
+        setIsAdmin(true);
+        setListings(rowsWithImages);
+      } catch (error) {
+        if (!active) return;
+        setIsAdmin(false);
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : "Unable to load admin listings."
+        );
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void fetchAdminListings();
+
+    return () => {
+      active = false;
+    };
+  }, [router, reloadKey]);
 
   async function updateStatus(
     listingId: string,
@@ -146,9 +161,9 @@ export default function AdminPage() {
   return (
     <main className="min-h-screen bg-[#080b12] px-5 py-10 text-white">
       <div className="mx-auto max-w-6xl">
-        <a href="/" className="font-bold text-amber-400">
+        <Link href="/" className="font-bold text-amber-400">
           ◈ CineRelay
-        </a>
+        </Link>
 
         <div className="mt-8 flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -164,7 +179,10 @@ export default function AdminPage() {
           </div>
 
           <button
-            onClick={() => void loadListings()}
+            onClick={() => {
+              setLoading(true);
+              setReloadKey((k) => k + 1);
+            }}
             disabled={loading}
             className="rounded-xl border border-white/15 px-4 py-3 text-sm font-semibold hover:border-amber-400 disabled:opacity-50"
           >
@@ -254,6 +272,7 @@ export default function AdminPage() {
                             rel="noopener noreferrer"
                             className="inline-block max-w-full"
                           >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
                               src={listing.evidence_url}
                               alt={`Private ticket evidence for ${listing.title}`}
@@ -359,12 +378,12 @@ export default function AdminPage() {
           </>
         )}
 
-        <a
+        <Link
           href="/"
           className="mt-8 inline-block text-sm text-gray-400 hover:text-amber-400"
         >
           ← Back to homepage
-        </a>
+        </Link>
       </div>
     </main>
   );

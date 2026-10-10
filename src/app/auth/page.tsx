@@ -2,9 +2,12 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 export default function AuthPage() {
+  const router = useRouter();
   const [mode, setMode] = useState<"signup" | "login">(
   typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("mode") === "login"
@@ -43,7 +46,7 @@ export default function AuthPage() {
 
         if (error) throw error;
 
-        window.location.href = "/sell";
+        router.push("/sell");
       }
     } catch (error) {
       setMessage(
@@ -57,9 +60,9 @@ export default function AuthPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#080b12] px-5 py-12 text-white">
       <section className="w-full max-w-md rounded-3xl border border-white/10 bg-white/[0.03] p-8">
-        <a href="/" className="font-bold text-amber-400">
+        <Link href="/" className="font-bold text-amber-400">
           ◈ CineRelay
-        </a>
+        </Link>
 
         <h1 className="mt-8 text-3xl font-black">
           {mode === "signup" ? "Join CineRelay" : "Welcome back"}
@@ -131,9 +134,9 @@ export default function AuthPage() {
             : "New here? Create an account"}
         </button>
 
-        <a href="/" className="mt-6 block text-sm text-gray-500">
+        <Link href="/" className="mt-6 block text-sm text-gray-500 hover:text-gray-300">
           ← Back to homepage
-        </a>
+        </Link>
       </section>
     </main>
   );

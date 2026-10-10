@@ -398,7 +398,7 @@ export default function ChatRoomPage() {
             </form>
 
             <p className="mt-3 text-xs leading-5 text-gray-500">
-              Confirm the issuer's transfer rules before paying.
+              Confirm the issuer&apos;s transfer rules before paying.
               Never share passwords or verification codes in chat.
             </p>
           </section>

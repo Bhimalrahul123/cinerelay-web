@@ -2,6 +2,8 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createWorker } from "tesseract.js";
 import { supabase } from "@/lib/supabase";
 
@@ -38,6 +40,7 @@ function fieldMatchesTicket(value: string, ticketText: string) {
 }
 
 export default function SellPage() {
+  const router = useRouter();
   const [category, setCategory] = useState("Movies");
   const [title, setTitle] = useState("");
   const [venue, setVenue] = useState("");
@@ -166,7 +169,7 @@ export default function SellPage() {
       } = await supabase.auth.getUser();
 
       if (authError || !user) {
-        window.location.href = "/auth?mode=login";
+        router.push("/auth?mode=login");
         return;
       }
 
@@ -289,9 +292,9 @@ export default function SellPage() {
   return (
     <main className="min-h-screen bg-[#080b12] px-5 py-12 text-white">
       <div className="mx-auto max-w-2xl">
-        <a href="/" className="font-bold text-amber-400">
+        <Link href="/" className="font-bold text-amber-400">
           ◈ CineRelay
-        </a>
+        </Link>
 
         <h1 className="mt-8 text-3xl font-black sm:text-4xl">
           Sell your ticket
@@ -506,12 +509,12 @@ export default function SellPage() {
           )}
         </form>
 
-        <a
+        <Link
           href="/"
           className="mt-6 inline-block text-sm text-gray-400 hover:text-amber-400"
         >
           ← Back to homepage
-        </a>
+        </Link>
       </div>
     </main>
   );

@@ -2,6 +2,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 type Listing = {
@@ -16,6 +18,7 @@ type Listing = {
 };
 
 export default function MyListingsPage() {
+  const router = useRouter();
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
@@ -29,7 +32,7 @@ export default function MyListingsPage() {
         } = await supabase.auth.getUser();
 
         if (authError || !user) {
-          window.location.href = "/auth?mode=login";
+          router.push("/auth?mode=login");
           return;
         }
 
@@ -55,8 +58,8 @@ export default function MyListingsPage() {
       }
     }
 
-    loadListings();
-  }, []);
+    void loadListings();
+  }, [router]);
 
   function statusStyle(status: string) {
     switch (status) {
@@ -74,9 +77,9 @@ export default function MyListingsPage() {
   return (
     <main className="min-h-screen bg-[#080b12] px-5 py-12 text-white">
       <div className="mx-auto max-w-5xl">
-        <a href="/" className="font-bold text-amber-400">
+        <Link href="/" className="font-bold text-amber-400">
           ◈ CineRelay
-        </a>
+        </Link>
 
         <div className="mt-8 flex flex-wrap items-end justify-between gap-4">
           <div>
@@ -167,12 +170,12 @@ export default function MyListingsPage() {
           </div>
         )}
 
-        <a
+        <Link
           href="/"
           className="mt-8 inline-block text-sm text-gray-400 hover:text-amber-400"
         >
           ← Back to homepage
-        </a>
+        </Link>
       </div>
     </main>
   );

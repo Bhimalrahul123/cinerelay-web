@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 type Listing = {
@@ -28,6 +28,7 @@ const categoryIcons: Record<string, string> = {
 
 export default function ListingDetailsPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const id = params.id;
 
   const [listing, setListing] = useState<Listing | null>(null);
@@ -93,10 +94,11 @@ export default function ListingDetailsPage() {
       if (authError) throw authError;
 
       if (!user) {
-        window.location.href =
+        router.push(
           `/auth?mode=login&next=${encodeURIComponent(
             `/listing/${listing.id}`
-          )}`;
+          )}`
+        );
         return;
       }
 
@@ -108,15 +110,15 @@ export default function ListingDetailsPage() {
       );
 
       if (rpcError) {
-  console.error("CineRelay chat error:", rpcError);
-  throw new Error(rpcError.message);
-}
+        console.error("CineRelay chat error:", rpcError);
+        throw new Error(rpcError.message);
+      }
 
       if (!data || typeof data !== "string") {
         throw new Error("Could not open the conversation. Please try again.");
       }
 
-      window.location.href = `/messages/${data}`;
+      router.push(`/messages/${data}`);
     } catch (err) {
       setChatError(
         err instanceof Error
@@ -306,24 +308,34 @@ export default function ListingDetailsPage() {
                   </p>
                 )}
 
-                <button
-                  type="button"
-                  onClick={handleChatWithSeller}
-                  disabled={startingChat}
-                  className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-amber-400 px-5 py-3.5 font-bold text-black transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-                >
-                  {startingChat ? (
-                    "Opening conversation..."
-                  ) : (
-                    <>
-                      <span>💬</span>
-                      Chat with Seller
-                    </>
-                  )}
-                </button>
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <Link
+                    href={`/checkout/${listing.id}`}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-400 px-6 py-3.5 font-bold text-black transition hover:bg-amber-300"
+                  >
+                    <span>⚡</span>
+                    Buy Now · ₹{Number(listing.price).toLocaleString("en-IN")}
+                  </Link>
+
+                  <button
+                    type="button"
+                    onClick={handleChatWithSeller}
+                    disabled={startingChat}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/5 px-5 py-3.5 font-bold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {startingChat ? (
+                      "Opening conversation..."
+                    ) : (
+                      <>
+                        <span>💬</span>
+                        Chat with Seller
+                      </>
+                    )}
+                  </button>
+                </div>
 
                 <p className="mt-3 text-xs leading-5 text-gray-500">
-                  Never share passwords or OTPs. Confirm the issuer's
+                  Never share passwords or OTPs. Confirm the issuer&apos;s
                   transfer rules before making a payment.
                 </p>
               </div>

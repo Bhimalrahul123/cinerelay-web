@@ -1,10 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "";
 
-if (!url || !key) {
-  throw new Error("Missing Supabase environment variables.");
-}
-
-export const supabase = createClient(url, key);
+export const supabase = createClient(
+  url || "https://placeholder.supabase.co",
+  key || "placeholder-anon-key"
+);
