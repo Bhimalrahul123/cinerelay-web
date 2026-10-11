@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import {
+  getRazorpayKeyId,
+  getRazorpayKeySecret,
+  getSupabaseUrl,
+  getSupabaseServiceRoleKey,
+  getSupabaseAnonKey,
+} from "@/lib/env";
 
 export const runtime = "nodejs";
 
@@ -7,12 +14,13 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 
 export async function POST(request: NextRequest) {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const razorpayKey = process.env.RAZORPAY_KEY_ID;
-    const razorpaySecret = process.env.RAZORPAY_KEY_SECRET;
+    const supabaseUrl = getSupabaseUrl();
+    const serviceKey = getSupabaseServiceRoleKey();
+    const anonKey = getSupabaseAnonKey();
+    const razorpayKey = getRazorpayKeyId();
+    const razorpaySecret = getRazorpayKeySecret();
 
-    if (!supabaseUrl || !serviceKey) {
+    if (!supabaseUrl) {
       return NextResponse.json(
         { error: "Server database configuration is missing." },
         { status: 500 }
@@ -21,7 +29,10 @@ export async function POST(request: NextRequest) {
 
     if (!razorpayKey || !razorpaySecret) {
       return NextResponse.json(
-        { error: "Payment gateway credentials are not configured." },
+        {
+          error:
+            "Payment gateway credentials are not configured. Please ensure RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET are configured in the server environment.",
+        },
         { status: 500 }
       );
     }
@@ -38,11 +49,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const admin = createClient(supabaseUrl, serviceKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
+    const dbClient = serviceKey
+      ? createClient(supabaseUrl, serviceKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        })
+      : createClient(supabaseUrl, anonKey || "placeholder-anon-key", {
+          global: {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
 
-    const { data: authData, error: authError } = await admin.auth.getUser(token);
+    const { data: authData, error: authError } = await dbClient.auth.getUser(token);
 
     if (authError || !authData.user) {
       return NextResponse.json(
@@ -71,7 +89,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify listing directly from database
-    const { data: listing, error: listingError } = await admin
+    const { data: listing, error: listingError } = await dbClient
       .from("listings")
       .select("id, seller_id, title, price, status")
       .eq("id", listingId)
@@ -115,7 +133,7 @@ export async function POST(request: NextRequest) {
     const now = new Date();
 
     // Expire overdue pending orders for this listing
-    await admin
+    await dbClient
       .from("orders")
       .update({ status: "expired" })
       .eq("listing_id", listingId)
@@ -123,7 +141,7 @@ export async function POST(request: NextRequest) {
       .lte("expires_at", now.toISOString());
 
     // Check for existing active pending orders on this listing
-    const { data: activeOrders } = await admin
+    const { data: activeOrders } = await dbClient
       .from("orders")
       .select("id, buyer_id, amount_paise, expires_at")
       .eq("listing_id", listingId)
@@ -156,14 +174,14 @@ export async function POST(request: NextRequest) {
       expires_at: expiresAt.toISOString(),
     };
 
-    let { data: order, error: orderError } = await admin
+    let { data: order, error: orderError } = await dbClient
       .from("orders")
       .insert({ ...orderPayload, payment_method: "card" })
       .select("id, amount_paise, expires_at")
       .single();
 
     if (orderError && orderError.code === "42703") {
-      const fallbackResult = await admin
+      const fallbackResult = await dbClient
         .from("orders")
         .insert(orderPayload)
         .select("id, amount_paise, expires_at")
@@ -180,23 +198,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create Razorpay standard order server-side
+    // Create standard payment order in Razorpay
+    const authHeader = Buffer.from(`${razorpayKey}:${razorpaySecret}`).toString("base64");
+    const receiptId = `cr_ord_${order.id.replace(/-/g, "").slice(0, 20)}`;
+
     let razorpayRes: Response;
     try {
       razorpayRes = await fetch("https://api.razorpay.com/v1/orders", {
         method: "POST",
         headers: {
-          Authorization:
-            "Basic " +
-            Buffer.from(`${razorpayKey}:${razorpaySecret}`).toString("base64"),
+          Authorization: `Basic ${authHeader}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           amount: amountPaise,
           currency: "INR",
-          receipt: order.id,
+          receipt: receiptId,
           notes: {
-            cinerelay_order_id: order.id,
+            order_id: order.id,
             listing_id: listing.id,
             buyer_id: authData.user.id,
           },
@@ -205,7 +224,7 @@ export async function POST(request: NextRequest) {
       });
     } catch (networkErr) {
       console.error("Razorpay order API network error:", networkErr);
-      await admin.from("orders").update({ status: "failed" }).eq("id", order.id);
+      await dbClient.from("orders").update({ status: "failed" }).eq("id", order.id);
       return NextResponse.json(
         { error: "Could not reach the payment gateway. Please try again." },
         { status: 502 }
@@ -216,7 +235,7 @@ export async function POST(request: NextRequest) {
 
     if (!razorpayRes.ok || !razorpayOrder.id) {
       console.error("Razorpay order creation error:", razorpayOrder);
-      await admin.from("orders").update({ status: "failed" }).eq("id", order.id);
+      await dbClient.from("orders").update({ status: "failed" }).eq("id", order.id);
       return NextResponse.json(
         {
           error:
@@ -228,7 +247,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Update order with razorpay_order_id (and fallback to razorpay_qr_id if razorpay_order_id column doesn't exist yet)
-    const updateResult = await admin
+    const updateResult = await dbClient
       .from("orders")
       .update({
         razorpay_order_id: razorpayOrder.id,
@@ -237,7 +256,7 @@ export async function POST(request: NextRequest) {
 
     if (updateResult.error && updateResult.error.code === "42703") {
       // Store in razorpay_qr_id as safe fallback before migration is run
-      await admin
+      await dbClient
         .from("orders")
         .update({
           razorpay_qr_id: razorpayOrder.id,

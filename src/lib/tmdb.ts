@@ -1,6 +1,6 @@
+import { applyTmdbAuth, getTmdbAuth } from "./env";
 
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
-const token = process.env.TMDB_READ_ACCESS_TOKEN;
 
 export type MovieResult = {
   id: number;
@@ -11,16 +11,21 @@ export type MovieResult = {
   rating: number;
 };
 
-async function fetchWithRetry(url: string, attempts = 3): Promise<Response> {
+async function fetchWithRetry(urlObj: URL, attempts = 3): Promise<Response> {
   let lastError: unknown;
 
   for (let attempt = 0; attempt < attempts; attempt++) {
     try {
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
+      const headers: Record<string, string> = {
+        Accept: "application/json",
+      };
+
+      // Clone URL so attempts don't mutate parameters repeatedly
+      const targetUrl = new URL(urlObj.toString());
+      applyTmdbAuth(targetUrl, headers);
+
+      const response = await fetch(targetUrl.toString(), {
+        headers,
         cache: "no-store",
         signal: AbortSignal.timeout(12000),
       });
@@ -58,8 +63,11 @@ export async function searchMovies(
   query: string,
   page = 1
 ): Promise<{ results: MovieResult[]; page: number; totalPages: number }> {
-  if (!token) {
-    throw new Error("TMDB_READ_ACCESS_TOKEN is missing from .env.local.");
+  const auth = getTmdbAuth();
+  if (!auth) {
+    throw new Error(
+      "TMDB API credentials are not configured on the server. Please configure TMDB_READ_ACCESS_TOKEN or TMDB_API_KEY."
+    );
   }
 
   const url = new URL(`${TMDB_BASE_URL}/search/movie`);
@@ -68,11 +76,11 @@ export async function searchMovies(
   url.searchParams.set("language", "en-US");
   url.searchParams.set("page", String(Math.min(Math.max(page, 1), 500)));
 
-  const response = await fetchWithRetry(url.toString());
+  const response = await fetchWithRetry(url);
 
   if (!response.ok) {
-    console.error("TMDB request failed with status:", response.status);
-    throw new Error(`TMDB request failed with status ${response.status}.`);
+    console.error("TMDB search request failed with status:", response.status);
+    throw new Error(`TMDB search request failed with status ${response.status}.`);
   }
 
   const data = await response.json();

@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import {
+  getRazorpayKeyId,
+  getRazorpayKeySecret,
+  getSupabaseUrl,
+  getSupabaseServiceRoleKey,
+  getSupabaseAnonKey,
+} from "@/lib/env";
 
 export const runtime = "nodejs";
 
@@ -7,12 +14,13 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 
 export async function GET(request: NextRequest) {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const razorpayKey = process.env.RAZORPAY_KEY_ID;
-    const razorpaySecret = process.env.RAZORPAY_KEY_SECRET;
+    const supabaseUrl = getSupabaseUrl();
+    const serviceKey = getSupabaseServiceRoleKey();
+    const anonKey = getSupabaseAnonKey();
+    const razorpayKey = getRazorpayKeyId();
+    const razorpaySecret = getRazorpayKeySecret();
 
-    if (!supabaseUrl || !serviceKey) {
+    if (!supabaseUrl) {
       return NextResponse.json(
         { error: "Server configuration is missing." },
         { status: 500 }
@@ -31,14 +39,24 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const admin = createClient(supabaseUrl, serviceKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    });
+    const dbClient = serviceKey
+      ? createClient(supabaseUrl, serviceKey, {
+          auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+          },
+        })
+      : createClient(supabaseUrl, anonKey || "placeholder-anon-key", {
+          global: {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+          auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+          },
+        });
 
-    const { data: authData, error: authError } = await admin.auth.getUser(token);
+    const { data: authData, error: authError } = await dbClient.auth.getUser(token);
 
     if (authError || !authData.user) {
       return NextResponse.json(
@@ -57,7 +75,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Query order
-    const { data: order, error } = await admin
+    const { data: order, error } = await dbClient
       .from("orders")
       .select("id, status, amount_paise, expires_at, buyer_id, seller_id, listing_id, razorpay_qr_id, razorpay_payment_id")
       .eq("id", orderId)
@@ -122,7 +140,7 @@ export async function GET(request: NextRequest) {
 
       if (paymentConfirmedOnGateway) {
         // Update to paid
-        await admin
+        await dbClient
           .from("orders")
           .update({
             status: "paid",
@@ -130,7 +148,7 @@ export async function GET(request: NextRequest) {
           })
           .eq("id", order.id);
 
-        await admin
+        await dbClient
           .from("listings")
           .update({ status: "sold" })
           .eq("id", order.listing_id);
@@ -144,7 +162,7 @@ export async function GET(request: NextRequest) {
       }
 
       // No payment confirmed on gateway -> safely mark expired
-      const { error: expireError } = await admin
+      const { error: expireError } = await dbClient
         .from("orders")
         .update({ status: "expired" })
         .eq("id", order.id)

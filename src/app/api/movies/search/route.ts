@@ -1,6 +1,6 @@
-
 import { NextRequest, NextResponse } from "next/server";
 import { searchMovies } from "@/lib/tmdb";
+import { getTmdbAuth } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +30,21 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const auth = getTmdbAuth();
+  if (!auth) {
+    return NextResponse.json(
+      {
+        error:
+          "Movie search service is not configured on the server. Please configure TMDB_READ_ACCESS_TOKEN or TMDB_API_KEY.",
+        results: [],
+        page: 1,
+        totalPages: 0,
+        configured: false,
+      },
+      { status: 503 }
+    );
+  }
+
   try {
     const data = await searchMovies(query, page);
 
@@ -43,7 +58,10 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(
       {
-        error: "Unable to search movies right now. Please try again.",
+        error:
+          error instanceof Error
+            ? error.message
+            : "Unable to search movies right now. Please try again.",
       },
       { status: 502 }
     );

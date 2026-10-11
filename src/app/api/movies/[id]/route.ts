@@ -1,11 +1,41 @@
-
 import { NextRequest, NextResponse } from "next/server";
+import { applyTmdbAuth, getTmdbAuth } from "@/lib/env";
 
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 const IMAGE_BASE_URL = "https://image.tmdb.org/t/p";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 3600;
+
+interface VideoItem {
+  site?: string;
+  type?: string;
+  key?: string;
+  official?: boolean;
+}
+
+function resolveYouTubeTrailer(videos: VideoItem[]): string | null {
+  const ytVideos = (videos ?? []).filter(
+    (v) =>
+      v.site === "YouTube" &&
+      typeof v.key === "string" &&
+      /^[a-zA-Z0-9_-]{11}$/.test(v.key)
+  );
+
+  if (ytVideos.length === 0) return null;
+
+  function score(v: VideoItem): number {
+    let s = 0;
+    if (v.type === "Trailer") s += 100;
+    else if (v.type === "Teaser") s += 50;
+    else if (v.type === "Clip") s += 25;
+    if (v.official) s += 10;
+    return s;
+  }
+
+  const sorted = [...ytVideos].sort((a, b) => score(b) - score(a));
+  return `https://www.youtube.com/watch?v=${sorted[0].key}`;
+}
 
 export async function GET(
   _request: NextRequest,
@@ -21,13 +51,16 @@ export async function GET(
       );
     }
 
-    const token = process.env.TMDB_READ_ACCESS_TOKEN;
-
-    if (!token) {
-      console.error("TMDB_READ_ACCESS_TOKEN is missing.");
+    const auth = getTmdbAuth();
+    if (!auth) {
+      console.warn("TMDB credentials are not configured in environment variables.");
       return NextResponse.json(
-        { error: "Movie service is not configured." },
-        { status: 500 }
+        {
+          error:
+            "Movie service credentials are not configured on the server. Please set TMDB_READ_ACCESS_TOKEN or TMDB_API_KEY.",
+          configured: false,
+        },
+        { status: 503 }
       );
     }
 
@@ -35,12 +68,14 @@ export async function GET(
     url.searchParams.set("language", "en-US");
     url.searchParams.set("append_to_response", "videos,credits");
 
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+    };
+    applyTmdbAuth(url, headers);
+
     const response = await fetch(url.toString(), {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-      },
+      headers,
       cache: "no-store",
       signal: AbortSignal.timeout(15000),
     });
@@ -53,7 +88,7 @@ export async function GET(
           error:
             response.status === 404
               ? "Movie not found."
-              : "Unable to retrieve movie details.",
+              : `Unable to retrieve movie details from TMDB (status ${response.status}).`,
         },
         { status: response.status === 404 ? 404 : 502 }
       );
@@ -61,17 +96,7 @@ export async function GET(
 
     const movie = await response.json();
 
-    const trailer = (movie.videos?.results ?? []).find(
-      (video: {
-        site: string;
-        type: string;
-        key: string;
-        official?: boolean;
-      }) =>
-        video.site === "YouTube" &&
-        video.type === "Trailer" &&
-        Boolean(video.key)
-    );
+    const trailerUrl = resolveYouTubeTrailer(movie.videos?.results ?? []);
 
     const cast = (movie.credits?.cast ?? [])
       .slice(0, 12)
@@ -79,21 +104,27 @@ export async function GET(
         (actor: {
           id: number;
           name: string;
-          character: string;
-          profile_path: string | null;
+          character?: string;
+          profile_path?: string | null;
         }) => ({
           id: actor.id,
           name: actor.name,
-          character: actor.character,
+          character: actor.character ?? "",
           profileUrl: actor.profile_path
             ? `${IMAGE_BASE_URL}/w185${actor.profile_path}`
             : null,
         })
       );
 
+    const genres: string[] = (movie.genres ?? [])
+      .map((g: { id?: number; name?: string } | string) =>
+        typeof g === "string" ? g : g.name ?? ""
+      )
+      .filter((name: string) => Boolean(name && name.trim()));
+
     return NextResponse.json({
       id: movie.id,
-      title: movie.title,
+      title: movie.title ?? "",
       overview: movie.overview ?? "",
       posterUrl: movie.poster_path
         ? `${IMAGE_BASE_URL}/w500${movie.poster_path}`
@@ -102,11 +133,10 @@ export async function GET(
         ? `${IMAGE_BASE_URL}/w1280${movie.backdrop_path}`
         : null,
       releaseDate: movie.release_date ?? "",
-      rating: movie.vote_average ?? 0,
-      runtime: movie.runtime ?? null,
-      trailerUrl: trailer
-        ? `https://www.youtube.com/watch?v=${trailer.key}`
-        : null,
+      rating: typeof movie.vote_average === "number" ? movie.vote_average : 0,
+      runtime: typeof movie.runtime === "number" ? movie.runtime : null,
+      trailerUrl,
+      genres,
       cast,
     });
   } catch (error) {

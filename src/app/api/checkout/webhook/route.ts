@@ -1,6 +1,11 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import {
+  getRazorpayWebhookSecret,
+  getSupabaseUrl,
+  getSupabaseServiceRoleKey,
+} from "@/lib/env";
 
 export const runtime = "nodejs";
 
@@ -44,9 +49,9 @@ interface RazorpayWebhookEvent {
 
 export async function POST(request: NextRequest) {
   try {
-    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const webhookSecret = getRazorpayWebhookSecret();
+    const supabaseUrl = getSupabaseUrl();
+    const serviceKey = getSupabaseServiceRoleKey();
 
     if (!webhookSecret || !supabaseUrl || !serviceKey) {
       console.error("Webhook server configuration is incomplete.");

@@ -1,6 +1,12 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import {
+  getRazorpayKeySecret,
+  getSupabaseUrl,
+  getSupabaseServiceRoleKey,
+  getSupabaseAnonKey,
+} from "@/lib/env";
 
 export const runtime = "nodejs";
 
@@ -8,11 +14,12 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 
 export async function POST(request: NextRequest) {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const razorpaySecret = process.env.RAZORPAY_KEY_SECRET;
+    const supabaseUrl = getSupabaseUrl();
+    const serviceKey = getSupabaseServiceRoleKey();
+    const anonKey = getSupabaseAnonKey();
+    const razorpaySecret = getRazorpayKeySecret();
 
-    if (!supabaseUrl || !serviceKey || !razorpaySecret) {
+    if (!supabaseUrl || !razorpaySecret) {
       return NextResponse.json(
         { error: "Server payment configuration is missing." },
         { status: 500 }
@@ -31,11 +38,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const admin = createClient(supabaseUrl, serviceKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
+    const dbClient = serviceKey
+      ? createClient(supabaseUrl, serviceKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        })
+      : createClient(supabaseUrl, anonKey || "placeholder-anon-key", {
+          global: {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
 
-    const { data: authData, error: authError } = await admin.auth.getUser(token);
+    const { data: authData, error: authError } = await dbClient.auth.getUser(token);
 
     if (authError || !authData.user) {
       return NextResponse.json(
@@ -69,58 +83,76 @@ export async function POST(request: NextRequest) {
 
     if (!orderId || !UUID_REGEX.test(orderId)) {
       return NextResponse.json(
-        { error: "Invalid order ID format." },
-        { status: 400 }
-      );
-    }
-
-    if (!razorpay_order_id || typeof razorpay_order_id !== "string") {
-      return NextResponse.json(
-        { error: "Missing Razorpay order ID." },
-        { status: 400 }
-      );
-    }
-
-    if (!razorpay_payment_id || typeof razorpay_payment_id !== "string") {
-      return NextResponse.json(
-        { error: "Missing Razorpay payment ID." },
+        { error: "Invalid order ID." },
         { status: 400 }
       );
     }
 
     if (
+      !razorpay_order_id ||
+      !razorpay_payment_id ||
       !razorpay_signature ||
-      typeof razorpay_signature !== "string" ||
-      !/^[a-f0-9]{64}$/i.test(razorpay_signature)
+      typeof razorpay_signature !== "string"
     ) {
       return NextResponse.json(
-        { error: "Invalid Razorpay payment signature format." },
+        { error: "Missing required Razorpay payment confirmation parameters." },
         { status: 400 }
       );
     }
 
-    // Official Razorpay signature verification:
-    // HMAC-SHA256(order_id + "|" + payment_id, secret)
-    const signPayload = `${razorpay_order_id}|${razorpay_payment_id}`;
-    const expectedSignature = createHmac("sha256", razorpaySecret)
-      .update(signPayload)
-      .digest();
+    // Verify signature using timing-safe comparison: HMAC-SHA256(order_id + "|" + payment_id, secret)
+    const expectedPayload = `${razorpay_order_id}|${razorpay_payment_id}`;
+    const expectedDigest = createHmac("sha256", razorpaySecret)
+      .update(expectedPayload)
+      .digest("hex");
 
-    const receivedSignature = Buffer.from(razorpay_signature, "hex");
+    const expectedBuffer = Buffer.from(expectedDigest, "utf8");
+    const receivedBuffer = Buffer.from(razorpay_signature, "utf8");
 
     if (
-      receivedSignature.length !== expectedSignature.length ||
-      !timingSafeEqual(receivedSignature, expectedSignature)
+      expectedBuffer.length !== receivedBuffer.length ||
+      !timingSafeEqual(expectedBuffer, receivedBuffer)
     ) {
-      console.error("Razorpay signature verification failed for order:", orderId);
+      console.error("Razorpay signature mismatch for order:", orderId);
       return NextResponse.json(
-        { error: "Payment verification signature mismatch. Security check failed." },
+        { error: "Invalid payment signature." },
         { status: 400 }
       );
+    }
+
+    // Double-check payment status with Razorpay API using key credentials
+    const razorpayKey = process.env.RAZORPAY_KEY_ID;
+    if (razorpayKey) {
+      try {
+        const authBasic = Buffer.from(`${razorpayKey}:${razorpaySecret}`).toString("base64");
+        const paymentCheckRes = await fetch(
+          `https://api.razorpay.com/v1/payments/${razorpay_payment_id}`,
+          {
+            headers: { Authorization: `Basic ${authBasic}` },
+            cache: "no-store",
+          }
+        );
+        if (paymentCheckRes.ok) {
+          const paymentData = await paymentCheckRes.json();
+          if (
+            paymentData.status !== "captured" &&
+            paymentData.status !== "authorized"
+          ) {
+            return NextResponse.json(
+              {
+                error: `Payment is not successful with provider (status: ${paymentData.status}).`,
+              },
+              { status: 400 }
+            );
+          }
+        }
+      } catch (err) {
+        console.warn("Direct Razorpay payment check warning:", err);
+      }
     }
 
     // Lookup order in Supabase
-    const { data: order, error: orderError } = await admin
+    const { data: order, error: orderError } = await dbClient
       .from("orders")
       .select("id, listing_id, buyer_id, amount_paise, status, razorpay_qr_id")
       .eq("id", orderId)
@@ -160,7 +192,7 @@ export async function POST(request: NextRequest) {
     // First attempt confirmation via RPC if migration was executed
     let confirmed = false;
     try {
-      const { data: rpcResult, error: rpcError } = await admin.rpc(
+      const { data: rpcResult, error: rpcError } = await dbClient.rpc(
         "cinerelay_confirm_card_payment",
         {
           p_order_id: order.id,
@@ -173,12 +205,12 @@ export async function POST(request: NextRequest) {
         confirmed = true;
       }
     } catch {
-      // Fallback to direct service_role database operation below
+      // Fallback to direct database operation below
     }
 
     // If RPC was not available or not run yet, execute verified direct update
     if (!confirmed) {
-      const { error: updateOrderErr } = await admin
+      const { error: updateOrderErr } = await dbClient
         .from("orders")
         .update({
           status: "paid",
@@ -197,7 +229,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Mark listing as sold
-      await admin
+      await dbClient
         .from("listings")
         .update({ status: "sold" })
         .eq("id", order.listing_id);

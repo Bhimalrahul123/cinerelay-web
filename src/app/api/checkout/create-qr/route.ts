@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import {
+  getRazorpayKeyId,
+  getRazorpayKeySecret,
+  getSupabaseUrl,
+  getSupabaseServiceRoleKey,
+  getSupabaseAnonKey,
+} from "@/lib/env";
 
 export const runtime = "nodejs";
 
@@ -7,12 +14,13 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 
 export async function POST(request: NextRequest) {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const razorpayKey = process.env.RAZORPAY_KEY_ID;
-    const razorpaySecret = process.env.RAZORPAY_KEY_SECRET;
+    const supabaseUrl = getSupabaseUrl();
+    const serviceKey = getSupabaseServiceRoleKey();
+    const anonKey = getSupabaseAnonKey();
+    const razorpayKey = getRazorpayKeyId();
+    const razorpaySecret = getRazorpayKeySecret();
 
-    if (!supabaseUrl || !serviceKey) {
+    if (!supabaseUrl) {
       return NextResponse.json(
         { error: "Server database configuration is missing." },
         { status: 500 }
@@ -21,7 +29,10 @@ export async function POST(request: NextRequest) {
 
     if (!razorpayKey || !razorpaySecret) {
       return NextResponse.json(
-        { error: "Payment gateway credentials are not configured." },
+        {
+          error:
+            "Payment gateway credentials are not configured. Please ensure RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET are configured in the server environment.",
+        },
         { status: 500 }
       );
     }
@@ -38,11 +49,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const admin = createClient(supabaseUrl, serviceKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
+    const dbClient = serviceKey
+      ? createClient(supabaseUrl, serviceKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        })
+      : createClient(supabaseUrl, anonKey || "placeholder-anon-key", {
+          global: {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
 
-    const { data: authData, error: authError } = await admin.auth.getUser(token);
+    const { data: authData, error: authError } = await dbClient.auth.getUser(token);
 
     if (authError || !authData.user) {
       return NextResponse.json(
@@ -70,8 +88,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify listing directly from database
-    const { data: listing, error: listingError } = await admin
+    // Verify listing directly from Supabase
+    const { data: listing, error: listingError } = await dbClient
       .from("listings")
       .select("id, seller_id, title, price, status")
       .eq("id", listingId)
@@ -86,7 +104,9 @@ export async function POST(request: NextRequest) {
 
     if (listing.status !== "approved") {
       return NextResponse.json(
-        { error: `This ticket is not available for purchase (status: ${listing.status}).` },
+        {
+          error: `This ticket is not available for purchase (status: ${listing.status}).`,
+        },
         { status: 400 }
       );
     }
@@ -98,7 +118,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Server-side amount derivation (never from client)
+    // Server-side amount derivation (never trust client)
     const amountPaise = Math.round(Number(listing.price) * 100);
 
     if (
@@ -115,7 +135,7 @@ export async function POST(request: NextRequest) {
     const now = new Date();
 
     // Expire overdue pending orders for this listing
-    await admin
+    await dbClient
       .from("orders")
       .update({ status: "expired" })
       .eq("listing_id", listingId)
@@ -123,9 +143,11 @@ export async function POST(request: NextRequest) {
       .lte("expires_at", now.toISOString());
 
     // Check for existing active pending orders on this listing
-    const { data: activeOrders } = await admin
+    const { data: activeOrders } = await dbClient
       .from("orders")
-      .select("id, buyer_id, amount_paise, expires_at, razorpay_qr_id, qr_image_url, qr_short_url")
+      .select(
+        "id, buyer_id, amount_paise, expires_at, qr_image_url, qr_short_url"
+      )
       .eq("listing_id", listingId)
       .eq("status", "pending")
       .gt("expires_at", now.toISOString());
@@ -133,18 +155,18 @@ export async function POST(request: NextRequest) {
     if (activeOrders && activeOrders.length > 0) {
       const activeOrder = activeOrders[0];
 
-      // If another buyer has an active pending checkout
       if (activeOrder.buyer_id !== authData.user.id) {
         return NextResponse.json(
           {
-            error: "Another buyer is currently checking out this ticket. Please check back in a few minutes.",
+            error:
+              "Another buyer is currently checking out this ticket. Please check back in a few minutes.",
           },
           { status: 409 }
         );
       }
 
-      // If this buyer already has an active pending order with an existing valid QR
-      if (activeOrder.qr_image_url && activeOrder.amount_paise === amountPaise) {
+      // Reuse active QR if valid
+      if (activeOrder.qr_image_url) {
         return NextResponse.json({
           orderId: activeOrder.id,
           amountPaise: activeOrder.amount_paise,
@@ -212,7 +234,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             error:
-              "Direct UPI QR generation is not enabled on this Razorpay account. Please use 'Pay with Card / Netbanking / UPI' to complete your payment.",
+              "Direct UPI QR generation is not enabled on this Razorpay account. Please use 'Cards & Netbanking' to complete your payment.",
             code: "QR_NOT_SUPPORTED",
             details: description,
           },
@@ -243,7 +265,7 @@ export async function POST(request: NextRequest) {
       qr_short_url: qr.short_url ?? null,
     };
 
-    let { data: order, error: orderError } = await admin
+    let { data: order, error: orderError } = await dbClient
       .from("orders")
       .insert({ ...orderPayload, payment_method: "upi_qr" })
       .select("id, amount_paise, expires_at")
@@ -251,7 +273,7 @@ export async function POST(request: NextRequest) {
 
     // If payment_method column doesn't exist yet, retry without it
     if (orderError && orderError.code === "42703") {
-      const fallbackResult = await admin
+      const fallbackResult = await dbClient
         .from("orders")
         .insert(orderPayload)
         .select("id, amount_paise, expires_at")
