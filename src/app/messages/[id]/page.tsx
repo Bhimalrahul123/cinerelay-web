@@ -1,11 +1,32 @@
+
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
-type Message = {
+type Conversation = {
+  id: string;
+  listing_id: string;
+  buyer_id: string;
+  seller_id: string;
+  created_at: string;
+};
+
+type Listing = {
+  title: string;
+  category: string;
+  price: number;
+};
+
+type ChatMessage = {
   id: string;
   conversation_id: string;
   sender_id: string;
@@ -13,34 +34,52 @@ type Message = {
   created_at: string;
 };
 
-type ChatInfo = {
-  id: string;
-  buyer_id: string;
-  seller_id: string;
-  listing_id: string;
-  listings: {
-    title: string;
-    category: string;
-    price: number;
-  } | null;
-};
+function formatPrice(price: number) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 2,
+  }).format(Number(price));
+}
 
-export default function ChatRoomPage() {
-  const params = useParams<{ id: string }>();
-  const conversationId = params.id;
+function formatMessageTime(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "";
+
+  return date.toLocaleString("en-IN", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+export default function ConversationPage() {
+  const params = useParams();
+  const router = useRouter();
+
+  const rawId = params?.id;
+  const conversationId = typeof rawId === "string" ? rawId : "";
 
   const [userId, setUserId] = useState("");
-  const [chat, setChat] = useState<ChatInfo | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [conversation, setConversation] =
+    useState<Conversation | null>(null);
+  const [listing, setListing] = useState<Listing | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
-  const [sendError, setSendError] = useState("");
 
   const bottomRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const loadMessages = useCallback(async () => {
+    if (!conversationId) {
+      throw new Error("Conversation ID is missing from the URL.");
+    }
+
     const { data, error: queryError } = await supabase
       .from("chat_messages")
       .select("id, conversation_id, sender_id, body, created_at")
@@ -49,16 +88,22 @@ export default function ChatRoomPage() {
 
     if (queryError) throw queryError;
 
-    setMessages((data ?? []) as Message[]);
+    setMessages((data ?? []) as ChatMessage[]);
   }, [conversationId]);
 
   useEffect(() => {
-    let active = true;
+    let cancelled = false;
 
-    async function initialiseChat() {
+    async function initialize() {
       try {
         setLoading(true);
         setError("");
+
+        if (!conversationId) {
+          throw new Error(
+            "Conversation ID is missing. Open this chat from the Messages page."
+          );
+        }
 
         const {
           data: { user },
@@ -68,79 +113,94 @@ export default function ChatRoomPage() {
         if (authError) throw authError;
 
         if (!user) {
-          if (active) {
-            setError("Please log in to access this conversation.");
-          }
+          router.replace(
+            `/auth?mode=login&next=${encodeURIComponent(
+              `/messages/${conversationId}`
+            )}`
+          );
           return;
         }
 
-        if (!active) return;
+        if (cancelled) return;
         setUserId(user.id);
 
-        // RLS permits only conversation participants to read this row.
-        const { data: conversation, error: chatError } = await supabase
+        const { data: chat, error: chatError } = await supabase
           .from("chat_conversations")
-          .select(`
-            id,
-            buyer_id,
-            seller_id,
-            listing_id,
-            listings (
-              title,
-              category,
-              price
-            )
-          `)
+          .select("id, listing_id, buyer_id, seller_id, created_at")
           .eq("id", conversationId)
           .maybeSingle();
 
         if (chatError) throw chatError;
 
-        if (!conversation) {
+        if (!chat) {
           throw new Error(
-            "Conversation not found, or you do not have access to it."
+            "Conversation not found or access is denied. Open Messages and select a valid conversation."
           );
         }
 
-        if (!active) return;
-        setChat(conversation as unknown as ChatInfo);
+        const currentChat = chat as Conversation;
+
+        if (
+          currentChat.buyer_id !== user.id &&
+          currentChat.seller_id !== user.id
+        ) {
+          throw new Error(
+            "Your account is not a participant in this conversation."
+          );
+        }
+
+        if (cancelled) return;
+        setConversation(currentChat);
+
+        const { data: item, error: listingError } = await supabase
+          .from("listings")
+          .select("title, category, price")
+          .eq("id", currentChat.listing_id)
+          .maybeSingle();
+
+        if (listingError) throw listingError;
+
+        if (cancelled) return;
+        setListing(item as Listing | null);
 
         await loadMessages();
       } catch (err) {
-        if (active) {
+        console.error("[CineRelay Chat] Initialization failed:", err);
+
+        if (!cancelled) {
           setError(
             err instanceof Error
               ? err.message
-              : "Unable to open this conversation."
+              : "Unable to load this conversation."
           );
         }
       } finally {
-        if (active) setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
 
-    void initialiseChat();
+    void initialize();
 
     return () => {
-      active = false;
+      cancelled = true;
     };
-  }, [conversationId, loadMessages]);
+  }, [conversationId, loadMessages, router]);
 
   useEffect(() => {
-    if (!chat) return;
+    if (!conversation || !userId) return;
 
     const channel = supabase
-      .channel(`chat-${conversationId}`)
+      .channel(`conversation-${conversation.id}`)
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
           table: "chat_messages",
-          filter: `conversation_id=eq.${conversationId}`,
+          filter: `conversation_id=eq.${conversation.id}`,
         },
         (payload) => {
-          const incoming = payload.new as Message;
+          const incoming = payload.new as ChatMessage;
 
           setMessages((current) => {
             if (current.some((message) => message.id === incoming.id)) {
@@ -160,32 +220,32 @@ export default function ChatRoomPage() {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [chat, conversationId]);
+  }, [conversation, userId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  async function sendMessage(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  async function sendMessage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
 
     const body = draft.trim();
 
-    if (!body || !userId || !chat || sending) return;
+    if (!body || !conversation || !userId || sending) return;
 
-    if (body.length > 4000) {
-      setSendError("Messages cannot exceed 4,000 characters.");
+    if (body.length > 2000) {
+      setError("Messages cannot exceed 2,000 characters.");
       return;
     }
 
-    setSending(true);
-    setSendError("");
-
     try {
+      setSending(true);
+      setError("");
+
       const { data, error: insertError } = await supabase
         .from("chat_messages")
         .insert({
-          conversation_id: conversationId,
+          conversation_id: conversation.id,
           sender_id: userId,
           body,
         })
@@ -194,14 +254,14 @@ export default function ChatRoomPage() {
 
       if (insertError) throw insertError;
 
-      const savedMessage = data as Message;
+      const newMessage = data as ChatMessage;
 
       setMessages((current) => {
-        if (current.some((message) => message.id === savedMessage.id)) {
+        if (current.some((message) => message.id === newMessage.id)) {
           return current;
         }
 
-        return [...current, savedMessage].sort(
+        return [...current, newMessage].sort(
           (a, b) =>
             new Date(a.created_at).getTime() -
             new Date(b.created_at).getTime()
@@ -209,109 +269,164 @@ export default function ChatRoomPage() {
       });
 
       setDraft("");
+
+      if (textareaRef.current) {
+        textareaRef.current.style.height = "auto";
+      }
     } catch (err) {
-      setSendError(
+      console.error("[CineRelay Chat] Send failed:", err);
+
+      setError(
         err instanceof Error
           ? err.message
-          : "Message could not be sent. Please try again."
+          : "Unable to send your message."
       );
     } finally {
       setSending(false);
     }
   }
 
-  const otherPerson =
-    chat && userId === chat.buyer_id ? "Seller" : "Buyer";
+  const isBuyer = conversation?.buyer_id === userId;
 
   return (
-    <main className="flex min-h-screen flex-col bg-[#080b12] text-white">
-      <header className="border-b border-white/10">
-        <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-4 px-4 py-4 sm:px-5">
-          <Link href="/" className="text-xl font-black sm:text-2xl">
-            <span className="text-amber-400">◈</span> CineRelay
+    <main className="min-h-screen bg-[#090a0c] text-[#f5f2eb]">
+      <header className="sticky top-0 z-40 border-b border-white/[0.08] bg-[#090a0c]/90 backdrop-blur-2xl">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
+          <Link href="/" className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#d6b36a]/30 bg-[#d6b36a]/[0.08] text-xl text-[#e5ca91]">
+              ◈
+            </span>
+
+            <span className="text-lg font-semibold tracking-[-0.04em] sm:text-xl">
+              Cine<span className="font-light text-[#d6b36a]">Relay</span>
+            </span>
           </Link>
 
           <Link
             href="/messages"
-            className="text-sm text-gray-300 hover:text-amber-400"
+            className="rounded-xl border border-white/10 px-4 py-2.5 text-sm text-white/65 transition hover:border-[#d6b36a]/40 hover:text-[#e5ca91]"
           >
-            ← All messages
+            <span aria-hidden="true">← </span>
+            All messages
           </Link>
         </div>
       </header>
 
-      {loading ? (
-        <div className="flex flex-1 items-center justify-center p-8 text-gray-400">
-          Loading conversation...
+      <section className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-9 lg:px-8">
+        <div className="mb-6">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#d6b36a]/25 bg-[#d6b36a]/[0.06] px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#e5ca91]">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#d6b36a]" />
+            Private conversation
+          </div>
+
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <h1 className="break-words text-3xl font-semibold tracking-[-0.05em] text-[#fffaf0] sm:text-4xl">
+                {listing?.title ?? "Your conversation"}
+                <span className="text-[#d6b36a]">.</span>
+              </h1>
+
+              <p className="mt-3 text-sm leading-6 text-white/50">
+                Discuss the details directly with the other participant.
+              </p>
+
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <span className="rounded-lg border border-white/[0.09] bg-white/[0.03] px-3 py-1.5 text-xs text-white/60">
+                  {listing?.category ?? "Ticket listing"}
+                </span>
+
+                {conversation && (
+                  <span className="rounded-lg border border-[#d6b36a]/20 bg-[#d6b36a]/[0.06] px-3 py-1.5 text-xs text-[#e5ca91]">
+                    {isBuyer ? "You're chatting with the seller" : "You're chatting with the buyer"}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {listing && (
+              <div className="shrink-0 rounded-2xl border border-[#d6b36a]/20 bg-[#d6b36a]/[0.05] px-5 py-4">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40">
+                  Listing price
+                </p>
+                <p className="mt-1 text-xl font-semibold text-[#e5ca91]">
+                  {formatPrice(Number(listing.price))}
+                </p>
+              </div>
+            )}
+          </div>
         </div>
-      ) : error ? (
-        <div className="mx-auto my-12 w-full max-w-xl px-5">
+
+        {loading ? (
+          <div className="flex min-h-80 flex-col items-center justify-center rounded-3xl border border-white/[0.08] bg-white/[0.02] p-8">
+            <div
+              className="h-9 w-9 animate-spin rounded-full border-2 border-white/15 border-t-[#d6b36a]"
+              aria-label="Loading conversation"
+            />
+            <p className="mt-5 text-sm text-white/50">
+              Preparing your conversation...
+            </p>
+          </div>
+        ) : error && !conversation ? (
           <div
             role="alert"
-            className="rounded-2xl border border-red-500/30 bg-red-500/10 p-6"
+            className="rounded-3xl border border-red-400/20 bg-red-400/[0.05] p-6 sm:p-9"
           >
-            <h1 className="text-xl font-bold">Unable to open chat</h1>
-            <p className="mt-3 break-words text-sm text-red-300">
+            <span className="text-2xl text-red-200">!</span>
+
+            <h2 className="mt-3 text-xl font-semibold text-[#fffaf0]">
+              Unable to open this conversation
+            </h2>
+
+            <p className="mt-3 break-words text-sm leading-6 text-red-100/70">
               {error}
             </p>
 
-            {error.includes("log in") && (
-              <Link
-                href="/auth?mode=login"
-                className="mt-5 inline-block rounded-xl bg-amber-400 px-5 py-3 font-bold text-black"
-              >
-                Log in
-              </Link>
-            )}
-
-            <Link
-              href="/messages"
-              className="ml-3 mt-5 inline-block text-amber-400"
-            >
+            <Link href="/messages" className="premium-button mt-5">
               Back to messages
             </Link>
           </div>
-        </div>
-      ) : chat ? (
-        <>
-          <section className="mx-auto w-full max-w-4xl px-4 py-5 sm:px-5">
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
-              <p className="text-xs font-semibold uppercase tracking-widest text-amber-400">
-                Private conversation · {otherPerson}
-              </p>
+        ) : conversation ? (
+          <div className="overflow-hidden rounded-3xl border border-white/[0.09] bg-[#101114] shadow-2xl shadow-black/20">
+            <div className="flex items-center justify-between gap-3 border-b border-white/[0.07] bg-white/[0.015] px-4 py-4 sm:px-6">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#d6b36a]/25 bg-[#d6b36a]/[0.07] text-lg text-[#e5ca91]">
+                  ◇
+                </div>
 
-              <h1 className="mt-2 break-words text-xl font-black sm:text-2xl">
-                {chat.listings?.title ?? "Ticket listing"}
-              </h1>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-[#fffaf0]">
+                    {isBuyer ? "Seller" : "Buyer"}
+                  </p>
+                  <p className="mt-1 text-xs text-white/40">
+                    Ticket discussion
+                  </p>
+                </div>
+              </div>
 
-              <p className="mt-2 text-sm text-gray-400">
-                {chat.listings?.category ?? "Listing"}
-                {chat.listings
-                  ? ` · ₹${Number(chat.listings.price).toLocaleString("en-IN")}`
-                  : ""}
-              </p>
-
-              <Link
-                href={`/listing/${chat.listing_id}`}
-                className="mt-3 inline-block text-sm font-semibold text-amber-400 hover:text-amber-300"
-              >
-                View ticket details →
-              </Link>
+              <span className="flex shrink-0 items-center gap-2 text-xs text-white/40">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#d6b36a]" />
+                Private chat
+              </span>
             </div>
-          </section>
 
-          <section
-            aria-label="Chat messages"
-            className="mx-auto flex w-full max-w-4xl flex-1 flex-col px-4 pb-4 sm:px-5"
-          >
-            <div className="flex-1 space-y-4 rounded-2xl border border-white/10 bg-[#0d121c] p-4 sm:p-6">
+            <div className="flex min-h-[320px] max-h-[58vh] flex-col gap-5 overflow-y-auto p-4 sm:min-h-[400px] sm:p-6">
               {messages.length === 0 ? (
-                <div className="flex min-h-64 flex-col items-center justify-center text-center">
-                  <span className="text-5xl">💬</span>
-                  <h2 className="mt-4 font-bold">Start the conversation</h2>
-                  <p className="mt-2 max-w-sm text-sm leading-6 text-gray-400">
-                    Ask about ticket details, transfer eligibility,
-                    or anything you need to clarify before proceeding.
+                <div className="m-auto max-w-sm py-12 text-center">
+                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-[#d6b36a]/25 bg-[#d6b36a]/[0.06] text-3xl text-[#e5ca91]">
+                    ◇
+                  </div>
+
+                  <p className="mt-5 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#d6b36a]">
+                    A fresh start
+                  </p>
+
+                  <h2 className="mt-2 text-xl font-semibold text-[#fffaf0]">
+                    Start the conversation
+                  </h2>
+
+                  <p className="mt-2 text-sm leading-6 text-white/45">
+                    Ask about ticket details, transfer eligibility, or anything
+                    you need to clarify before proceeding.
                   </p>
                 </div>
               ) : (
@@ -324,30 +439,22 @@ export default function ChatRoomPage() {
                       className={`flex ${mine ? "justify-end" : "justify-start"}`}
                     >
                       <div
-                        className={`max-w-[85%] break-words rounded-2xl px-4 py-3 sm:max-w-[75%] ${
+                        className={`max-w-[88%] rounded-2xl px-4 py-3 sm:max-w-[75%] ${
                           mine
-                            ? "rounded-br-sm bg-amber-400 text-black"
-                            : "rounded-bl-sm border border-white/10 bg-[#171e2b] text-white"
+                            ? "rounded-br-sm border border-[#d6b36a]/30 bg-gradient-to-br from-[#e8cb8c] to-[#c6a45c] text-[#17130b]"
+                            : "rounded-bl-sm border border-white/[0.09] bg-[#191a1e] text-[#f5f2eb]"
                         }`}
                       >
-                        <p className="whitespace-pre-wrap text-sm leading-6">
+                        <p className="whitespace-pre-wrap break-words text-sm leading-6">
                           {message.body}
                         </p>
 
                         <p
                           className={`mt-2 text-right text-[10px] ${
-                            mine ? "text-black/60" : "text-gray-500"
+                            mine ? "text-black/55" : "text-white/35"
                           }`}
                         >
-                          {new Date(message.created_at).toLocaleString(
-                            "en-IN",
-                            {
-                              day: "numeric",
-                              month: "short",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            }
-                          )}
+                          {formatMessageTime(message.created_at)}
                         </p>
                       </div>
                     </div>
@@ -358,55 +465,111 @@ export default function ChatRoomPage() {
               <div ref={bottomRef} />
             </div>
 
-            {sendError && (
-              <p role="alert" className="mt-3 text-sm text-red-300">
-                {sendError}
-              </p>
+            {error && (
+              <div
+                role="alert"
+                className="mx-4 mb-3 rounded-xl border border-red-400/20 bg-red-400/[0.05] px-4 py-3 text-sm text-red-200/80 sm:mx-6"
+              >
+                {error}
+              </div>
             )}
 
             <form
               onSubmit={sendMessage}
-              className="mt-4 flex items-end gap-3"
+              className="border-t border-white/[0.08] bg-[#0c0d0f] p-3 sm:p-5"
             >
-              <textarea
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (
-                    e.key === "Enter" &&
-                    !e.shiftKey &&
-                    !e.nativeEvent.isComposing
-                  ) {
-                    e.preventDefault();
-                    e.currentTarget.form?.requestSubmit();
-                  }
-                }}
-                maxLength={4000}
-                rows={2}
-                placeholder="Write your message..."
-                aria-label="Write your message"
-                className="min-h-12 flex-1 resize-y rounded-2xl border border-white/10 bg-[#111722] px-4 py-3 text-sm outline-none focus:border-amber-400"
-              />
+              <label htmlFor="chat-message" className="sr-only">
+                Write a message
+              </label>
 
-              <button
-                type="submit"
-                disabled={!draft.trim() || sending}
-                className="rounded-2xl bg-amber-400 px-5 py-3 font-bold text-black transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {sending ? "Sending..." : "Send"}
-              </button>
+              <div className="rounded-2xl border border-white/[0.1] bg-[#141518] p-2 transition focus-within:border-[#d6b36a]/40">
+                <textarea
+                  ref={textareaRef}
+                  id="chat-message"
+                  value={draft}
+                  onChange={(event) => {
+                    setDraft(event.target.value);
+                    setError("");
+
+                    const textarea = event.target;
+                    textarea.style.height = "auto";
+                    textarea.style.height = `${Math.min(
+                      textarea.scrollHeight,
+                      160
+                    )}px`;
+                  }}
+                  onKeyDown={(event) => {
+                    if (
+                      event.key === "Enter" &&
+                      !event.shiftKey &&
+                      !event.nativeEvent.isComposing
+                    ) {
+                      event.preventDefault();
+                      event.currentTarget.form?.requestSubmit();
+                    }
+                  }}
+                  placeholder="Write your message..."
+                  rows={2}
+                  maxLength={2000}
+                  disabled={sending}
+                  className="max-h-40 min-h-12 w-full resize-none bg-transparent px-3 py-3 text-sm leading-6 text-[#f5f2eb] outline-none placeholder:text-white/30 disabled:opacity-50"
+                />
+
+                <div className="flex items-center justify-between gap-3 border-t border-white/[0.06] px-2 pt-3">
+                  <div className="min-w-0">
+                    <p className="text-[10px] text-white/35">
+                      Enter to send · Shift + Enter for a new line
+                    </p>
+                    <p
+                      className={`mt-1 text-[10px] ${
+                        draft.length > 1800
+                          ? "text-[#e5ca91]"
+                          : "text-white/25"
+                      }`}
+                    >
+                      {draft.length}/2000 characters
+                    </p>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={!draft.trim() || sending}
+                    className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#e8cb8c] to-[#c6a45c] px-5 py-3 text-sm font-semibold text-[#17130b] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {sending ? "Sending..." : "Send"}
+                    {!sending && <span aria-hidden="true">↗</span>}
+                  </button>
+                </div>
+              </div>
+
+              <p className="mt-3 px-1 text-center text-[10px] leading-5 text-white/30">
+                Keep your ticket discussions on CineRelay. Never share
+                passwords or verification codes.
+              </p>
             </form>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-white/[0.08] p-8 text-center text-sm text-white/45">
+            Conversation could not be loaded.
+          </div>
+        )}
+      </section>
 
-            <p className="mt-3 text-xs leading-5 text-gray-500">
-              Confirm the issuer&apos;s transfer rules before paying.
-              Never share passwords or verification codes in chat.
-            </p>
-          </section>
-        </>
-      ) : null}
+      <footer className="mt-8 border-t border-white/[0.08]">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-7 text-xs text-white/35 sm:px-6 lg:px-8">
+          <Link href="/" className="font-semibold text-white/70">
+            Cine<span className="font-light text-[#d6b36a]">Relay</span>
+          </Link>
 
-      <footer className="border-t border-white/10 px-5 py-5 text-center text-xs text-gray-500">
-        © 2026 CineRelay. All rights reserved.
+          <p>© 2026 CineRelay. All rights reserved.</p>
+
+          <Link
+            href="/messages"
+            className="transition hover:text-[#e5ca91]"
+          >
+            All messages →
+          </Link>
+        </div>
       </footer>
     </main>
   );
