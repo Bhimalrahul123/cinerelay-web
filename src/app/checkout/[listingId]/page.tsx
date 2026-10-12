@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { isTicketExpired } from "@/lib/expiration";
 
 type Listing = {
   id: string;
@@ -314,6 +315,11 @@ export default function CheckoutPage() {
           setListingError("This listing is unavailable or no longer approved.");
         } else {
           const loadedListing = data as Listing;
+          if (isTicketExpired(loadedListing.event_date, loadedListing.event_time)) {
+            setListingError("This ticket has expired as the event show date/time has passed.");
+            setLoading(false);
+            return;
+          }
           setListing(loadedListing);
 
           // If it's a movie with TMDB ID, fetch poster
@@ -960,15 +966,18 @@ export default function CheckoutPage() {
                       setPaymentError("");
                       setPaymentStatus("idle");
                     }}
-                    className={`flex flex-col items-center justify-center gap-2 rounded-2xl border p-4 text-center transition ${
+                    className={`relative flex flex-col items-center justify-center gap-1.5 rounded-2xl border p-3.5 text-center transition ${
                       paymentMethod === "card"
                         ? "border-[#d6b36a] bg-[#d6b36a]/[0.10] text-[#f4dfac]"
                         : "border-white/10 bg-white/[0.02] text-white/60 hover:border-white/20"
                     }`}
                   >
-                    <Icon name="card" className="h-6 w-6" />
-                    <span className="text-xs font-bold">Cards & Netbanking</span>
-                    <span className="text-[10px] text-white/40">Razorpay Checkout</span>
+                    <span className="mb-0.5 inline-block rounded-full bg-[#d6b36a]/20 border border-[#d6b36a]/40 px-2 py-0.5 text-[9px] font-bold text-[#f4dfac]">
+                      RECOMMENDED
+                    </span>
+                    <Icon name="card" className="h-5 w-5" />
+                    <span className="text-xs font-bold">UPI, Cards & Netbanking</span>
+                    <span className="text-[10px] text-white/45">GPay, PhonePe, QR, Cards</span>
                   </button>
 
                   <button
@@ -980,15 +989,18 @@ export default function CheckoutPage() {
                         setPaymentStatus("idle");
                       }
                     }}
-                    className={`flex flex-col items-center justify-center gap-2 rounded-2xl border p-4 text-center transition ${
+                    className={`flex flex-col items-center justify-center gap-1.5 rounded-2xl border p-3.5 text-center transition ${
                       paymentMethod === "upi_qr"
                         ? "border-[#d6b36a] bg-[#d6b36a]/[0.10] text-[#f4dfac]"
                         : "border-white/10 bg-white/[0.02] text-white/60 hover:border-white/20"
                     }`}
                   >
-                    <Icon name="qr" className="h-6 w-6" />
-                    <span className="text-xs font-bold">Direct UPI QR</span>
-                    <span className="text-[10px] text-white/40">Scan with any UPI app</span>
+                    <span className="mb-0.5 inline-block rounded-full bg-white/[0.04] border border-white/10 px-2 py-0.5 text-[9px] font-medium text-white/40">
+                      DIRECT QR
+                    </span>
+                    <Icon name="qr" className="h-5 w-5" />
+                    <span className="text-xs font-bold">Standalone UPI QR</span>
+                    <span className="text-[10px] text-white/45">Requires Bharat QR</span>
                   </button>
                 </div>
               </div>
@@ -1011,7 +1023,7 @@ export default function CheckoutPage() {
                   ) : (
                     <>
                       <Icon name="lock" className="h-4 w-4" />
-                      Pay {formatPrice(Number(listing.price))} with Card / Online
+                      Pay {formatPrice(Number(listing.price))} via UPI / Cards
                       <Icon name="arrow" className="h-4 w-4" />
                     </>
                   )}
@@ -1044,6 +1056,10 @@ export default function CheckoutPage() {
             {/* Action Buttons: UPI QR flow */}
             {paymentMethod === "upi_qr" && (paymentStatus === "idle" || paymentStatus === "failed" || paymentStatus === "creating") && (
               <div className="mt-6 space-y-3">
+                <div className="rounded-xl border border-white/10 bg-white/[0.025] p-3 text-center text-xs leading-5 text-white/60">
+                  💡 Tip: The <strong className="text-[#f4dfac]">UPI & Cards</strong> option includes Google Pay, PhonePe, Paytm, and an in-modal QR code.
+                </div>
+
                 <button
                   type="button"
                   onClick={() => void handleCreateQR()}
@@ -1196,18 +1212,24 @@ export default function CheckoutPage() {
               >
                 <p className="font-bold">Checkout Notice:</p>
                 <p>{paymentError}</p>
-                {paymentMethod === "upi_qr" && paymentError.includes("QR") && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPaymentMethod("card");
-                      setPaymentError("");
-                      setPaymentStatus("idle");
-                    }}
-                    className="mt-2 font-bold text-amber-300 underline"
-                  >
-                    Switch to Card / Razorpay Checkout →
-                  </button>
+                {paymentMethod === "upi_qr" && (paymentError.includes("QR") || paymentError.includes("provider") || paymentError.includes("enabled")) && (
+                  <div className="mt-3 border-t border-red-400/20 pt-2.5">
+                    <p className="text-xs text-white/80">
+                      You can complete your payment via UPI (Google Pay, PhonePe, Paytm, or in-modal QR) right now:
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentMethod("card");
+                        setPaymentError("");
+                        setPaymentStatus("idle");
+                        void handleCardCheckout();
+                      }}
+                      className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#d6b36a] to-[#ebce8e] px-4 py-3 text-xs font-bold text-[#111111] shadow transition hover:brightness-110"
+                    >
+                      Pay via UPI / Cards (Razorpay Checkout) →
+                    </button>
+                  </div>
                 )}
               </div>
             )}

@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { supabase, isConfigured } from "@/lib/supabase";
+import { filterActiveListings } from "@/lib/expiration";
 import MessageNotifications from "@/components/MessageNotifications";
 
 type Listing = {
@@ -203,8 +204,13 @@ export default function HomePage() {
           throw error;
         }
 
-        setListings((data ?? []) as Listing[]);
+        const rawListings = (data ?? []) as Listing[];
+        const activeListings = filterActiveListings(rawListings);
+        setListings(activeListings);
         setErrorMessage("");
+
+        // Proactively trigger background system cleanup of expired tickets in database
+        void fetch("/api/listings/cleanup-expired", { method: "POST" }).catch(() => {});
       } catch (error) {
         const errObj =
           error && typeof error === "object"

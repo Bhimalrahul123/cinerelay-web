@@ -7,6 +7,7 @@ import {
   getSupabaseServiceRoleKey,
   getSupabaseAnonKey,
 } from "@/lib/env";
+import { isTicketExpired } from "@/lib/expiration";
 
 export const runtime = "nodejs";
 
@@ -91,7 +92,7 @@ export async function POST(request: NextRequest) {
     // Verify listing directly from database
     const { data: listing, error: listingError } = await dbClient
       .from("listings")
-      .select("id, seller_id, title, price, status")
+      .select("id, seller_id, title, price, status, event_date, event_time")
       .eq("id", listingId)
       .maybeSingle();
 
@@ -105,6 +106,22 @@ export async function POST(request: NextRequest) {
     if (listing.status !== "approved") {
       return NextResponse.json(
         { error: `This ticket is not available for purchase (status: ${listing.status}).` },
+        { status: 400 }
+      );
+    }
+
+    // Check if ticket event date/time has expired
+    if (isTicketExpired(listing.event_date, listing.event_time)) {
+      await dbClient
+        .from("listings")
+        .update({ status: "expired" })
+        .eq("id", listing.id);
+
+      return NextResponse.json(
+        {
+          error:
+            "This ticket has already expired as the event show date/time has passed.",
+        },
         { status: 400 }
       );
     }
@@ -131,69 +148,127 @@ export async function POST(request: NextRequest) {
     }
 
     const now = new Date();
+    const expiresAt = new Date(now.getTime() + 30 * 60 * 1000);
 
-    // Expire overdue pending orders for this listing
-    await dbClient
-      .from("orders")
-      .update({ status: "expired" })
-      .eq("listing_id", listingId)
-      .eq("status", "pending")
-      .lte("expires_at", now.toISOString());
+    let order: { id: string; amount_paise: number; expires_at: string } | null = null;
+    let orderError: { message?: string; code?: string; details?: string; hint?: string } | null = null;
 
-    // Check for existing active pending orders on this listing
-    const { data: activeOrders } = await dbClient
-      .from("orders")
-      .select("id, buyer_id, amount_paise, expires_at")
-      .eq("listing_id", listingId)
-      .eq("status", "pending")
-      .gt("expires_at", now.toISOString());
+    // 1. First attempt creation via secure RPC if migration has been executed
+    try {
+      const { data: rpcData, error: rpcErr } = await dbClient.rpc(
+        "cinerelay_create_order",
+        {
+          p_listing_id: listing.id,
+          p_buyer_id: authData.user.id,
+          p_payment_method: "card",
+        }
+      );
 
-    if (activeOrders && activeOrders.length > 0) {
-      const activeOrder = activeOrders[0];
-      if (activeOrder.buyer_id !== authData.user.id) {
-        return NextResponse.json(
-          {
-            error: "Another buyer is currently checking out this ticket. Please check back in a few minutes.",
-          },
-          { status: 409 }
+      if (!rpcErr && rpcData) {
+        if (rpcData.error) {
+          const isConflict = String(rpcData.error).includes("Another buyer");
+          return NextResponse.json(
+            { error: rpcData.error },
+            { status: isConflict ? 409 : 400 }
+          );
+        }
+        if (rpcData.order_id) {
+          order = {
+            id: rpcData.order_id,
+            amount_paise: rpcData.amount_paise ?? amountPaise,
+            expires_at: rpcData.expires_at ?? expiresAt.toISOString(),
+          };
+        }
+      } else if (rpcErr) {
+        console.warn(
+          "cinerelay_create_order RPC not available or returned error, falling back to direct table insert:",
+          rpcErr.message
         );
+      }
+    } catch (rpcEx) {
+      console.warn("cinerelay_create_order RPC call exception:", rpcEx);
+    }
+
+    // 2. Fallback to direct table operations if RPC was not used
+    if (!order) {
+      // Expire overdue pending orders for this listing
+      await dbClient
+        .from("orders")
+        .update({ status: "expired" })
+        .eq("listing_id", listingId)
+        .eq("status", "pending")
+        .lte("expires_at", now.toISOString());
+
+      // Check for existing active pending orders on this listing
+      const { data: activeOrders } = await dbClient
+        .from("orders")
+        .select("id, buyer_id, amount_paise, expires_at")
+        .eq("listing_id", listingId)
+        .eq("status", "pending")
+        .gt("expires_at", now.toISOString());
+
+      if (activeOrders && activeOrders.length > 0) {
+        const activeOrder = activeOrders[0];
+        if (activeOrder.buyer_id !== authData.user.id) {
+          return NextResponse.json(
+            {
+              error:
+                "Another buyer is currently checking out this ticket. Please check back in a few minutes.",
+            },
+            { status: 409 }
+          );
+        }
+        order = {
+          id: activeOrder.id,
+          amount_paise: activeOrder.amount_paise,
+          expires_at: activeOrder.expires_at,
+        };
+      } else {
+        const orderPayload: Record<string, unknown> = {
+          listing_id: listing.id,
+          buyer_id: authData.user.id,
+          seller_id: listing.seller_id,
+          amount_paise: amountPaise,
+          currency: "INR",
+          status: "pending",
+          expires_at: expiresAt.toISOString(),
+        };
+
+        const insertRes = await dbClient
+          .from("orders")
+          .insert({ ...orderPayload, payment_method: "card" })
+          .select("id, amount_paise, expires_at")
+          .single();
+
+        order = insertRes.data;
+        orderError = insertRes.error;
+
+        if (orderError && orderError.code === "42703") {
+          const fallbackResult = await dbClient
+            .from("orders")
+            .insert(orderPayload)
+            .select("id, amount_paise, expires_at")
+            .single();
+          order = fallbackResult.data;
+          orderError = fallbackResult.error;
+        }
       }
     }
 
-    // Set 30-minute expiry
-    const expiresAt = new Date(now.getTime() + 30 * 60 * 1000);
-
-    // Create pending order record in Supabase
-    const orderPayload: Record<string, unknown> = {
-      listing_id: listing.id,
-      buyer_id: authData.user.id,
-      seller_id: listing.seller_id,
-      amount_paise: amountPaise,
-      currency: "INR",
-      status: "pending",
-      expires_at: expiresAt.toISOString(),
-    };
-
-    let { data: order, error: orderError } = await dbClient
-      .from("orders")
-      .insert({ ...orderPayload, payment_method: "card" })
-      .select("id, amount_paise, expires_at")
-      .single();
-
-    if (orderError && orderError.code === "42703") {
-      const fallbackResult = await dbClient
-        .from("orders")
-        .insert(orderPayload)
-        .select("id, amount_paise, expires_at")
-        .single();
-      order = fallbackResult.data;
-      orderError = fallbackResult.error;
-    }
-
     if (orderError || !order) {
-      console.error("Order creation in Supabase failed:", orderError);
+      console.error("Order creation in Supabase failed:", {
+        code: orderError?.code,
+        message: orderError?.message,
+        details: orderError?.details,
+        hint: orderError?.hint,
+      });
       return NextResponse.json(
-        { error: "Could not initialize checkout order in database." },
+        {
+          error:
+            orderError?.code === "42501"
+              ? "Database permission denied on orders table. Please apply the 20261012_order_permissions_and_rpc.sql migration in Supabase SQL Editor."
+              : "Could not initialize checkout order in database.",
+        },
         { status: 500 }
       );
     }
@@ -246,22 +321,39 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Update order with razorpay_order_id (and fallback to razorpay_qr_id if razorpay_order_id column doesn't exist yet)
-    const updateResult = await dbClient
-      .from("orders")
-      .update({
-        razorpay_order_id: razorpayOrder.id,
-      })
-      .eq("id", order.id);
+    // Attach razorpay_order_id via RPC or direct update
+    let attached = false;
+    try {
+      const { data: rpcAttach, error: rpcAttachErr } = await dbClient.rpc(
+        "cinerelay_attach_razorpay_order",
+        {
+          p_order_id: order.id,
+          p_razorpay_order_id: razorpayOrder.id,
+        }
+      );
+      if (!rpcAttachErr && rpcAttach === true) {
+        attached = true;
+      }
+    } catch {
+      // RPC not yet configured
+    }
 
-    if (updateResult.error && updateResult.error.code === "42703") {
-      // Store in razorpay_qr_id as safe fallback before migration is run
-      await dbClient
+    if (!attached) {
+      const updateResult = await dbClient
         .from("orders")
         .update({
-          razorpay_qr_id: razorpayOrder.id,
+          razorpay_order_id: razorpayOrder.id,
         })
         .eq("id", order.id);
+
+      if (updateResult.error && updateResult.error.code === "42703") {
+        await dbClient
+          .from("orders")
+          .update({
+            razorpay_qr_id: razorpayOrder.id,
+          })
+          .eq("id", order.id);
+      }
     }
 
     const metadata = authData.user.user_metadata ?? {};

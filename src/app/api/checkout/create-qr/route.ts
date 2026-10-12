@@ -7,6 +7,7 @@ import {
   getSupabaseServiceRoleKey,
   getSupabaseAnonKey,
 } from "@/lib/env";
+import { isTicketExpired } from "@/lib/expiration";
 
 export const runtime = "nodejs";
 
@@ -91,7 +92,7 @@ export async function POST(request: NextRequest) {
     // Verify listing directly from Supabase
     const { data: listing, error: listingError } = await dbClient
       .from("listings")
-      .select("id, seller_id, title, price, status")
+      .select("id, seller_id, title, price, status, event_date, event_time")
       .eq("id", listingId)
       .maybeSingle();
 
@@ -106,6 +107,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error: `This ticket is not available for purchase (status: ${listing.status}).`,
+        },
+        { status: 400 }
+      );
+    }
+
+    // Check if ticket event date/time has passed
+    if (isTicketExpired(listing.event_date, listing.event_time)) {
+      await dbClient
+        .from("listings")
+        .update({ status: "expired" })
+        .eq("id", listing.id);
+
+      return NextResponse.json(
+        {
+          error:
+            "This ticket has already expired as the event show date/time has passed.",
         },
         { status: 400 }
       );

@@ -80,6 +80,14 @@ function getStatus(status: string) {
         dot: "bg-[#d6b36a]",
       };
 
+    case "expired":
+      return {
+        label: "Expired",
+        description: "Event show date has passed",
+        className: "border-amber-400/20 bg-amber-400/[0.07] text-amber-300",
+        dot: "bg-amber-300",
+      };
+
     default:
       return {
         label: status || "Unknown",

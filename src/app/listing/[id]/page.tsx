@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { isTicketExpired } from "@/lib/expiration";
 
 type Listing = {
   id: string;
@@ -203,7 +204,17 @@ export default function ListingDetailsPage() {
         if (fetchError) throw fetchError;
 
         if (active) {
-          setListing((data as Listing | null) ?? null);
+          const loadedListing = (data as Listing | null) ?? null;
+          setListing(loadedListing);
+
+          // If event show date/time has passed, trigger automatic status update
+          if (loadedListing && isTicketExpired(loadedListing.event_date, loadedListing.event_time)) {
+            void supabase
+              .from("listings")
+              .update({ status: "expired" })
+              .eq("id", id)
+              .then(() => {});
+          }
         }
       } catch (err) {
         if (active) {
@@ -342,6 +353,9 @@ export default function ListingDetailsPage() {
   }
 
   const isMovie = listing?.category === "Movies";
+  const isExpired = listing
+    ? isTicketExpired(listing.event_date, listing.event_time)
+    : false;
   const trailerEmbed = getYouTubeEmbedUrl(movie?.trailerUrl);
 
   const genres =
@@ -571,6 +585,25 @@ export default function ListingDetailsPage() {
                     description="Review the listing information carefully before making arrangements."
                   />
 
+                  {isExpired && (
+                    <div
+                      role="alert"
+                      className="mb-6 flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/[0.08] p-4 text-sm text-amber-200"
+                    >
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-xs font-bold text-amber-300">
+                        !
+                      </span>
+                      <div>
+                        <p className="font-semibold text-amber-300">
+                          This event has ended / expired
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-amber-200/80">
+                          The show date and time for this ticket have already passed. This listing is closed and cannot be purchased.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
                       <span className="inline-flex rounded-full border border-[#d6b36a]/25 bg-[#d6b36a]/[0.06] px-3 py-1.5 text-[11px] font-medium text-[#e5ca91]">
@@ -675,12 +708,18 @@ export default function ListingDetailsPage() {
                       </p>
                     )}
 
-                    <Link
-                      href={`/checkout/${listing.id}`}
-                      className="premium-button flex w-full items-center justify-center gap-2 py-3.5 text-sm"
-                    >
-                      Continue to checkout <span>↗</span>
-                    </Link>
+                    {isExpired ? (
+                      <div className="flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 py-3.5 text-sm font-semibold text-amber-200/90 shadow-sm">
+                        <span>Event Expired (Show Ended)</span>
+                      </div>
+                    ) : (
+                      <Link
+                        href={`/checkout/${listing.id}`}
+                        className="premium-button flex w-full items-center justify-center gap-2 py-3.5 text-sm"
+                      >
+                        Continue to checkout <span>↗</span>
+                      </Link>
+                    )}
 
                     <button
                       type="button"
