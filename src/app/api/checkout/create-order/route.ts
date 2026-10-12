@@ -236,21 +236,20 @@ export async function POST(request: NextRequest) {
 
         const insertRes = await dbClient
           .from("orders")
-          .insert({ ...orderPayload, payment_method: "card" })
+          .insert(orderPayload)
           .select("id, amount_paise, expires_at")
           .single();
 
         order = insertRes.data;
         orderError = insertRes.error;
 
-        if (orderError && orderError.code === "42703") {
-          const fallbackResult = await dbClient
+        if (order) {
+          // Best-effort update of payment_method if column exists
+          void dbClient
             .from("orders")
-            .insert(orderPayload)
-            .select("id, amount_paise, expires_at")
-            .single();
-          order = fallbackResult.data;
-          orderError = fallbackResult.error;
+            .update({ payment_method: "card" })
+            .eq("id", order.id)
+            .then(() => {});
         }
       }
     }
@@ -267,7 +266,9 @@ export async function POST(request: NextRequest) {
           error:
             orderError?.code === "42501"
               ? "Database permission denied on orders table. Please apply the 20261012_order_permissions_and_rpc.sql migration in Supabase SQL Editor."
-              : "Could not initialize checkout order in database.",
+              : orderError?.message
+                ? `Could not initialize checkout order in database: ${orderError.message}`
+                : "Could not initialize checkout order in database.",
         },
         { status: 500 }
       );
@@ -339,21 +340,22 @@ export async function POST(request: NextRequest) {
     }
 
     if (!attached) {
-      const updateResult = await dbClient
+      // Store in razorpay_qr_id (exists in base schema)
+      await dbClient
+        .from("orders")
+        .update({
+          razorpay_qr_id: razorpayOrder.id,
+        })
+        .eq("id", order.id);
+
+      // Best-effort update of razorpay_order_id if column exists
+      void dbClient
         .from("orders")
         .update({
           razorpay_order_id: razorpayOrder.id,
         })
-        .eq("id", order.id);
-
-      if (updateResult.error && updateResult.error.code === "42703") {
-        await dbClient
-          .from("orders")
-          .update({
-            razorpay_qr_id: razorpayOrder.id,
-          })
-          .eq("id", order.id);
-      }
+        .eq("id", order.id)
+        .then(() => {});
     }
 
     const metadata = authData.user.user_metadata ?? {};

@@ -210,7 +210,7 @@ export async function POST(request: NextRequest) {
 
     // If RPC was not available or not run yet, execute verified direct update
     if (!confirmed) {
-      const { error: updateOrderErr } = await dbClient
+      let updateOrderErr = (await dbClient
         .from("orders")
         .update({
           status: "paid",
@@ -218,12 +218,28 @@ export async function POST(request: NextRequest) {
           paid_at: new Date().toISOString(),
         })
         .eq("id", order.id)
-        .eq("status", "pending");
+        .eq("status", "pending")).error;
+
+      if (
+        updateOrderErr &&
+        (updateOrderErr.code === "PGRST204" ||
+          updateOrderErr.code === "42703" ||
+          String(updateOrderErr.message).includes("paid_at"))
+      ) {
+        updateOrderErr = (await dbClient
+          .from("orders")
+          .update({
+            status: "paid",
+            razorpay_payment_id: razorpay_payment_id,
+          })
+          .eq("id", order.id)
+          .eq("status", "pending")).error;
+      }
 
       if (updateOrderErr) {
         console.error("Order status update failed:", updateOrderErr);
         return NextResponse.json(
-          { error: "Could not update order status in database." },
+          { error: updateOrderErr.message || "Could not update order status in database." },
           { status: 500 }
         );
       }

@@ -282,21 +282,18 @@ export async function POST(request: NextRequest) {
       qr_short_url: qr.short_url ?? null,
     };
 
-    let { data: order, error: orderError } = await dbClient
+    const { data: order, error: orderError } = await dbClient
       .from("orders")
-      .insert({ ...orderPayload, payment_method: "upi_qr" })
+      .insert(orderPayload)
       .select("id, amount_paise, expires_at")
       .single();
 
-    // If payment_method column doesn't exist yet, retry without it
-    if (orderError && orderError.code === "42703") {
-      const fallbackResult = await dbClient
+    if (order) {
+      void dbClient
         .from("orders")
-        .insert(orderPayload)
-        .select("id, amount_paise, expires_at")
-        .single();
-      order = fallbackResult.data;
-      orderError = fallbackResult.error;
+        .update({ payment_method: "upi_qr" })
+        .eq("id", order.id)
+        .then(() => {});
     }
 
     if (orderError || !order) {
