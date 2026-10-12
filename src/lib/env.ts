@@ -1,6 +1,11 @@
 /**
  * Centralized environment variable resolution for CineRelay.
  * Trims values, removes accidental wrapping quotes, and resolves supported aliases.
+ *
+ * IMPORTANT FOR NEXT.JS:
+ * Client-accessible variables (NEXT_PUBLIC_*) MUST be accessed directly as static
+ * member expressions (e.g. process.env.NEXT_PUBLIC_XYZ) so that Turbopack / Webpack
+ * can inline their values into client-side JavaScript bundles during compilation.
  */
 
 function clean(value: string | undefined): string {
@@ -15,65 +20,78 @@ function clean(value: string | undefined): string {
   return trimmed;
 }
 
-function resolveFirst(...names: string[]): string {
-  for (const name of names) {
-    const val = clean(process.env[name]);
-    if (val) return val;
-  }
-  return "";
-}
-
-// Razorpay Key ID
-export function getRazorpayKeyId(): string {
-  return resolveFirst(
-    "RAZORPAY_KEY_ID",
-    "NEXT_PUBLIC_RAZORPAY_KEY_ID",
-    "RAZORPAY_KEY",
-    "RAZORPAY_ID"
-  );
-}
-
-// Razorpay Key Secret (Server-only)
-export function getRazorpayKeySecret(): string {
-  return resolveFirst(
-    "RAZORPAY_KEY_SECRET",
-    "RAZORPAY_SECRET",
-    "RAZORPAY_SECRET_KEY",
-    "RAZORPAY_API_SECRET"
-  );
-}
-
-// Razorpay Webhook Secret (Server-only)
-export function getRazorpayWebhookSecret(): string {
-  return resolveFirst(
-    "RAZORPAY_WEBHOOK_SECRET",
-    "RAZORPAY_WEBHOOK_KEY",
-    "RAZORPAY_SECRET_WEBHOOK"
-  );
-}
-
-// Supabase URL
+// Supabase URL (client & server)
 export function getSupabaseUrl(): string {
-  return resolveFirst("NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_URL");
-}
-
-// Supabase Anon / Publishable Key
-export function getSupabaseAnonKey(): string {
-  return resolveFirst(
-    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-    "SUPABASE_ANON_KEY",
-    "SUPABASE_PUBLISHABLE_KEY"
+  return (
+    clean(process.env.NEXT_PUBLIC_SUPABASE_URL) ||
+    clean(process.env.SUPABASE_URL) ||
+    ""
   );
 }
 
-// Supabase Service Role Key (Server-only)
+// Supabase Anon / Publishable Key (client & server)
+export function getSupabaseAnonKey(): string {
+  return (
+    clean(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) ||
+    clean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) ||
+    clean(process.env.SUPABASE_ANON_KEY) ||
+    clean(process.env.SUPABASE_PUBLISHABLE_KEY) ||
+    ""
+  );
+}
+
+// Supabase Service Role Key (server-only)
 export function getSupabaseServiceRoleKey(): string {
-  return resolveFirst(
-    "SUPABASE_SERVICE_ROLE_KEY",
-    "SUPABASE_SERVICE_KEY",
-    "SUPABASE_SECRET_KEY",
-    "SERVICE_ROLE_KEY"
+  return (
+    clean(process.env.SUPABASE_SERVICE_ROLE_KEY) ||
+    clean(process.env.SUPABASE_SERVICE_KEY) ||
+    clean(process.env.SUPABASE_SECRET_KEY) ||
+    clean(process.env.SERVICE_ROLE_KEY) ||
+    ""
+  );
+}
+
+// Check if Supabase client configuration is valid
+export function isSupabaseConfigured(): boolean {
+  const url = getSupabaseUrl();
+  const key = getSupabaseAnonKey();
+  return Boolean(
+    url &&
+      key &&
+      !url.includes("placeholder.supabase.co") &&
+      !key.includes("placeholder-anon-key")
+  );
+}
+
+// Razorpay Key ID (client & server)
+export function getRazorpayKeyId(): string {
+  return (
+    clean(process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID) ||
+    clean(process.env.RAZORPAY_KEY_ID) ||
+    clean(process.env.RAZORPAY_KEY) ||
+    clean(process.env.RAZORPAY_ID) ||
+    ""
+  );
+}
+
+// Razorpay Key Secret (server-only)
+export function getRazorpayKeySecret(): string {
+  return (
+    clean(process.env.RAZORPAY_KEY_SECRET) ||
+    clean(process.env.RAZORPAY_SECRET) ||
+    clean(process.env.RAZORPAY_SECRET_KEY) ||
+    clean(process.env.RAZORPAY_API_SECRET) ||
+    ""
+  );
+}
+
+// Razorpay Webhook Secret (server-only)
+export function getRazorpayWebhookSecret(): string {
+  return (
+    clean(process.env.RAZORPAY_WEBHOOK_SECRET) ||
+    clean(process.env.RAZORPAY_WEBHOOK_KEY) ||
+    clean(process.env.RAZORPAY_SECRET_WEBHOOK) ||
+    ""
   );
 }
 
@@ -83,15 +101,14 @@ export type TmdbAuth =
 
 // TMDB Authentication: supports v3 32-hex API key or v4 JWT Bearer Token
 export function getTmdbAuth(): TmdbAuth | null {
-  const raw = resolveFirst(
-    "TMDB_READ_ACCESS_TOKEN",
-    "TMDB_API_KEY",
-    "TMDB_ACCESS_TOKEN",
-    "TMDB_BEARER_TOKEN",
-    "TMDB_KEY",
-    "NEXT_PUBLIC_TMDB_API_KEY",
-    "NEXT_PUBLIC_TMDB_READ_ACCESS_TOKEN"
-  );
+  const raw =
+    clean(process.env.TMDB_READ_ACCESS_TOKEN) ||
+    clean(process.env.TMDB_API_KEY) ||
+    clean(process.env.NEXT_PUBLIC_TMDB_API_KEY) ||
+    clean(process.env.NEXT_PUBLIC_TMDB_READ_ACCESS_TOKEN) ||
+    clean(process.env.TMDB_ACCESS_TOKEN) ||
+    clean(process.env.TMDB_BEARER_TOKEN) ||
+    clean(process.env.TMDB_KEY);
 
   if (!raw) return null;
 

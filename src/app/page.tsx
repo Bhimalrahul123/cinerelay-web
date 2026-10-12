@@ -1,9 +1,9 @@
 
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
+import { supabase, isConfigured } from "@/lib/supabase";
 import MessageNotifications from "@/components/MessageNotifications";
 
 type Listing = {
@@ -167,6 +167,22 @@ export default function HomePage() {
     async function fetchListings() {
       setLoading(true);
 
+      if (!isConfigured) {
+        console.warn(
+          "CineRelay warning: Supabase credentials are not configured in environment variables."
+        );
+        if (active) {
+          setListings([]);
+          setErrorMessage(
+            process.env.NODE_ENV === "development"
+              ? "Database credentials are not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY."
+              : "We couldn't load listings right now. Please try again."
+          );
+          setLoading(false);
+        }
+        return;
+      }
+
       try {
         const { data, error } = await supabase
           .from("listings")
@@ -177,17 +193,45 @@ export default function HomePage() {
           .order("created_at", { ascending: false });
 
         if (!active) return;
-        if (error) throw error;
+        if (error) {
+          console.error("Failed to load listings from Supabase:", {
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            code: error.code,
+          });
+          throw error;
+        }
 
         setListings((data ?? []) as Listing[]);
         setErrorMessage("");
       } catch (error) {
-        console.error("Failed to load listings:", error);
+        const errObj =
+          error && typeof error === "object"
+            ? (error as {
+                message?: string;
+                details?: string;
+                hint?: string;
+                code?: string;
+              })
+            : null;
+
+        console.error("Failed to load listings:", {
+          message:
+            errObj?.message ||
+            (error instanceof Error ? error.message : String(error)),
+          details: errObj?.details,
+          hint: errObj?.hint,
+          code: errObj?.code,
+        });
 
         if (active) {
           setListings([]);
+          const isDev = process.env.NODE_ENV === "development";
+          const devHint =
+            isDev && errObj?.message ? ` (${errObj.message})` : "";
           setErrorMessage(
-            "We couldn't load listings right now. Please try again."
+            `We couldn't load listings right now. Please try again.${devHint}`
           );
         }
       } finally {
@@ -201,6 +245,8 @@ export default function HomePage() {
       active = false;
     };
   }, [reloadKey]);
+
+  const fetchedPosterIdsRef = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     let active = true;
@@ -219,7 +265,7 @@ export default function HomePage() {
     );
 
     const missingIds = movieIds.filter(
-      (id) => !Object.prototype.hasOwnProperty.call(moviePosters, id)
+      (id) => !fetchedPosterIdsRef.current.has(id)
     );
 
     if (missingIds.length === 0) {
@@ -227,6 +273,8 @@ export default function HomePage() {
         active = false;
       };
     }
+
+    missingIds.forEach((id) => fetchedPosterIdsRef.current.add(id));
 
     async function fetchPosters() {
       const results = await Promise.all(
@@ -263,7 +311,7 @@ export default function HomePage() {
     return () => {
       active = false;
     };
-  }, [listings, moviePosters]);
+  }, [listings]);
 
   const cities = useMemo(() => {
     const uniqueCities = new Map<string, string>();
