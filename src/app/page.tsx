@@ -100,6 +100,7 @@ function CategoryIcon({
       );
 
     case "Gift Cards":
+    case "Giveaways":
       return (
         <svg {...common}>
           <rect x="3" y="10" width="18" height="11" rx="2" />
@@ -409,8 +410,8 @@ export default function HomePage() {
               href="/giveaways"
               className="inline-flex items-center gap-1.5 rounded-full border border-[#d6b36a]/30 bg-[#d6b36a]/10 px-3 py-1 text-xs font-semibold text-[#f0dcae] transition hover:bg-[#d6b36a]/20"
             >
-              <span>🎁</span>
-              Giveaways
+              <CategoryIcon category="Giveaways" className="h-3.5 w-3.5 text-[#f0dcae]" />
+              <span>Giveaways</span>
             </Link>
 
             <Link

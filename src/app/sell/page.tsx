@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createWorker } from "tesseract.js";
 import { supabase } from "@/lib/supabase";
+import { CategoryIcon } from "@/components/CategoryIcon";
 
 const categories = ["Movies", "Events", "Gift Cards", "Trains", "Buses"] as const;
 
@@ -474,8 +475,8 @@ export default function SellPage() {
               href="/giveaways"
               className="inline-flex items-center gap-1.5 rounded-full border border-[#d6b36a]/30 bg-[#d6b36a]/10 px-3.5 py-2 text-xs font-semibold text-[#f0dcae] transition hover:bg-[#d6b36a]/20"
             >
-              <span>🎁</span>
-              Giveaways
+              <CategoryIcon category="Giveaways" className="h-3.5 w-3.5 text-[#f0dcae]" />
+              <span>Giveaways</span>
             </Link>
 
             <Link

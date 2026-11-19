@@ -579,8 +579,8 @@ export default function GiveawaysPage() {
               href="/giveaways"
               className="inline-flex items-center gap-1.5 rounded-full border border-[#d6b36a]/40 bg-[#d6b36a]/15 px-3 py-1.5 text-xs font-semibold text-[#f0dcae]"
             >
-              <span className="text-amber-300">🎁</span>
-              Giveaways
+              <CategoryIcon category="Giveaways" className="h-3.5 w-3.5 text-[#f0dcae]" />
+              <span>Giveaways</span>
             </Link>
 
             <Link
@@ -650,7 +650,8 @@ export default function GiveawaysPage() {
               }}
               className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#d6b36a] to-[#ebce8e] px-6 py-3.5 text-sm font-bold text-[#111111] shadow-lg shadow-[#d6b36a]/15 transition hover:brightness-110"
             >
-              <span>🎁</span> Host a Giveaway Contest
+              <CategoryIcon category="Giveaways" className="h-4 w-4 text-[#111111]" />
+              <span>Host a Giveaway Contest</span>
             </button>
 
             <a
@@ -776,8 +777,10 @@ export default function GiveawaysPage() {
           </div>
         ) : filteredGiveaways.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-white/15 bg-white/[0.02] p-12 text-center">
-            <span className="text-4xl">🎁</span>
-            <h3 className="mt-4 text-xl font-semibold text-[#fffaf0]">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-[#d6b36a]/30 bg-[#d6b36a]/10">
+              <CategoryIcon category="Giveaways" className="h-8 w-8 text-[#d6b36a]" />
+            </div>
+            <h3 className="mt-5 text-xl font-semibold text-[#fffaf0]">
               No active giveaways right now
             </h3>
             <p className="mt-2 text-sm text-white/50">

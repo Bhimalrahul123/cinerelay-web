@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { isTicketExpired } from "@/lib/expiration";
+import { CategoryIcon } from "@/components/CategoryIcon";
 
 type Listing = {
   id: string;
@@ -757,8 +758,8 @@ export default function CheckoutPage() {
               href="/giveaways"
               className="inline-flex items-center gap-1.5 rounded-full border border-[#d6b36a]/30 bg-[#d6b36a]/10 px-3 py-1.5 text-xs font-semibold text-[#f0dcae] transition hover:bg-[#d6b36a]/20"
             >
-              <span>🎁</span>
-              Giveaways
+              <CategoryIcon category="Giveaways" className="h-3.5 w-3.5 text-[#f0dcae]" />
+              <span>Giveaways</span>
             </Link>
 
             <Link

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { CategoryIcon } from "@/components/CategoryIcon";
 
 type Tab = "overview" | "bookings" | "support";
 
@@ -426,8 +427,8 @@ export default function ProfilePage() {
               href="/giveaways"
               className="inline-flex items-center gap-1.5 rounded-full border border-[#d6b36a]/30 bg-[#d6b36a]/10 px-3 py-1 text-xs font-semibold text-[#f0dcae] transition hover:bg-[#d6b36a]/20"
             >
-              <span>🎁</span>
-              Giveaways
+              <CategoryIcon category="Giveaways" className="h-3.5 w-3.5 text-[#f0dcae]" />
+              <span>Giveaways</span>
             </Link>
             <Link
               href="/my-listings"
