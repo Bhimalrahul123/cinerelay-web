@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import Footer from "@/components/Footer";
 import {
   Giveaway,
   GiveawayCategory,
@@ -1368,6 +1369,9 @@ export default function GiveawaysPage() {
           </div>
         </div>
       )}
+
+      {/* FOOTER */}
+      <Footer />
     </main>
   );
 }

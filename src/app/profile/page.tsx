@@ -1101,6 +1101,20 @@ export default function ProfilePage() {
             >
               Sell tickets
             </Link>
+            <Link
+              href="/feedback"
+              className="transition-colors hover:text-[#e5ca91]"
+            >
+              Raise Concerns
+            </Link>
+            <a
+              href="https://www.instagram.com/cinerelay?gwpx=OWluMHJoNm81dmVj"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="transition-colors hover:text-[#e5ca91]"
+            >
+              Instagram (@cinerelay)
+            </a>
           </nav>
         </div>
       </footer>

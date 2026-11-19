@@ -6,6 +6,7 @@ import Link from "next/link";
 import { supabase, isConfigured } from "@/lib/supabase";
 import { filterActiveListings } from "@/lib/expiration";
 import MessageNotifications from "@/components/MessageNotifications";
+import Footer from "@/components/Footer";
 
 type Listing = {
   id: string;
@@ -1124,83 +1125,7 @@ export default function HomePage() {
       </section>
 
       {/* PREMIUM FOOTER */}
-      <footer className="border-t border-white/[0.08] bg-black/30">
-        <div className="mx-auto max-w-[1440px] px-5 py-12 sm:px-8 lg:px-12">
-          <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
-            <div>
-              <Link href="/" className="inline-flex items-center gap-3">
-                <LogoMark small />
-                <span className="text-lg font-bold tracking-[-0.05em] text-white">
-                  Cine<span className="text-[#d6b36a]">Relay</span>
-                </span>
-              </Link>
-
-              <p className="mt-4 max-w-xs text-sm leading-7 text-white/60">
-                Discover new experiences. Connect with ticket holders. Give
-                unused tickets another chance.
-              </p>
-            </div>
-
-            <div>
-              <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-[#f0dcae]">
-                Explore
-              </h3>
-              <div className="mt-4 flex flex-col gap-3 text-sm text-white/65">
-                <Link href="/#marketplace" className="hover:text-white">
-                  Browse tickets
-                </Link>
-                <Link href="/sell" className="hover:text-white">
-                  Sell a ticket
-                </Link>
-                <Link href="/my-listings" className="hover:text-white">
-                  My listings
-                </Link>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-[#f0dcae]">
-                Your account
-              </h3>
-              <div className="mt-4 flex flex-col gap-3 text-sm text-white/65">
-                <Link href="/profile" className="hover:text-white">
-                  My profile
-                </Link>
-                <Link href="/messages" className="hover:text-white">
-                  Messages
-                </Link>
-                <Link href="/auth" className="hover:text-white">
-                  Sign in / Sign up
-                </Link>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-[#f0dcae]">
-                CineRelay
-              </h3>
-              <div className="mt-4 flex flex-col gap-3 text-sm text-white/65">
-                <a href="mailto:support@cinerelay.com" className="hover:text-white">
-                  Contact support
-                </a>
-                <Link href="/terms" className="hover:text-white">
-                  Terms
-                </Link>
-                <Link href="/privacy" className="hover:text-white">
-                  Privacy
-                </Link>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-10 flex flex-col gap-3 border-t border-white/[0.08] pt-6 text-xs text-white/45 sm:flex-row sm:items-center sm:justify-between">
-            <p>
-              © {new Date().getFullYear()} CineRelay. All rights reserved.
-            </p>
-            <p>Discover. Connect. Relay.</p>
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </main>
   );
 }
