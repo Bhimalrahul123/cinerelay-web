@@ -116,6 +116,19 @@ export default function GiveawaysPage() {
     isError?: boolean;
   } | null>(null);
 
+  // Participant roster & Winner edit tracking
+  const [expandedParticipants, setExpandedParticipants] = useState<Record<string, boolean>>({});
+  const [editingWinnerId, setEditingWinnerId] = useState<string | null>(null);
+  const [winnerInput, setWinnerInput] = useState("");
+  const [submittingWinner, setSubmittingWinner] = useState(false);
+
+  function toggleExpandedParticipants(id: string) {
+    setExpandedParticipants((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  }
+
   // Periodic tick for live countdown timers
   const [, setTimerTick] = useState(0);
 
@@ -208,22 +221,35 @@ export default function GiveawaysPage() {
         return;
       }
 
-      // Mark locally entered and increment count
+      // Mark locally entered and increment count, and immediately update participants list
       setGiveaways((list) =>
-        list.map((g) =>
-          g.id === giveaway.id
-            ? {
-                ...g,
-                has_entered: true,
-                entries_count: (g.entries_count ?? 0) + 1,
-              }
-            : g
-        )
+        list.map((g) => {
+          if (g.id !== giveaway.id) return g;
+          const currentList = g.participants ?? [];
+          const alreadyIn = currentList.some((p) => p.user_id === currentUserId);
+          const updatedParticipants = alreadyIn
+            ? currentList
+            : [
+                ...currentList,
+                {
+                  user_id: currentUserId,
+                  user_name: currentUserName || "Cinephile Participant",
+                  created_at: new Date().toISOString(),
+                },
+              ];
+
+          return {
+            ...g,
+            has_entered: true,
+            entries_count: (g.entries_count ?? 0) + 1,
+            participants: updatedParticipants,
+          };
+        })
       );
 
       setActionNotice({
         id: giveaway.id,
-        text: "🎉 You are officially entered! Winners will be drawn when time expires.",
+        text: "🎉 You are officially entered! Best of luck in the contest!",
         isError: false,
       });
     } catch (err) {
@@ -291,6 +317,85 @@ export default function GiveawaysPage() {
       });
     } finally {
       setDrawingId(null);
+    }
+  }
+
+  // Host manually announces or edits the winner name
+  async function handleAnnounceWinner(giveawayId: string) {
+    const name = winnerInput.trim();
+    if (!name) {
+      setActionNotice({
+        id: giveawayId,
+        text: "Please type the winner's name.",
+        isError: true,
+      });
+      return;
+    }
+
+    setSubmittingWinner(true);
+    setActionNotice(null);
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+
+      const res = await fetch(`/api/giveaways/${giveawayId}/announce-winner`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ winnerName: name }),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        setActionNotice({
+          id: giveawayId,
+          text: json.error || "Could not announce winner.",
+          isError: true,
+        });
+        return;
+      }
+
+      const announcedWinners = [
+        {
+          user_id: `winner-${Date.now().toString(36)}`,
+          user_name: name,
+          drawn_at: new Date().toISOString(),
+        },
+      ];
+
+      // Update giveaway state immediately: status becomes ended (not active), winner becomes announced name
+      setGiveaways((list) =>
+        list.map((g) =>
+          g.id === giveawayId
+            ? {
+                ...g,
+                status: "ended",
+                winners: announcedWinners,
+              }
+            : g
+        )
+      );
+
+      setEditingWinnerId(null);
+      setWinnerInput("");
+      setActionNotice({
+        id: giveawayId,
+        text: `🏆 Winner updated to "${name}"! Contest is now closed.`,
+        isError: false,
+      });
+    } catch (err) {
+      console.error("Announce winner error:", err);
+      setActionNotice({
+        id: giveawayId,
+        text: "Network error updating winner name.",
+        isError: true,
+      });
+    } finally {
+      setSubmittingWinner(false);
     }
   }
 
@@ -637,9 +742,11 @@ export default function GiveawaysPage() {
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {filteredGiveaways.map((ga) => {
               const countdown = formatTimeRemaining(ga.end_time);
+              const isActive = ga.status === "active" && !countdown.isEnded;
               const isHost = currentUserId && ga.host_id === currentUserId;
               const hasWon =
                 currentUserId &&
+                ga.winners &&
                 ga.winners.some((w) => w.user_id === currentUserId);
 
               return (
@@ -648,20 +755,21 @@ export default function GiveawaysPage() {
                   className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-white/[0.09] bg-[#101114] p-6 transition duration-300 hover:border-[#d6b36a]/40 hover:shadow-[0_20px_50px_rgba(0,0,0,0.35)]"
                 >
                   <div>
-                    {/* Top Badges */}
+                    {/* Top Badges: Category on left, Active (Green) / Not Active (Red) on right */}
                     <div className="flex items-center justify-between gap-2">
                       <span className="rounded-full border border-[#d6b36a]/30 bg-[#d6b36a]/[0.08] px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-[#e7ca8d]">
                         {ga.category}
                       </span>
 
-                      {ga.status === "active" && !countdown.isEnded ? (
-                        <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-400">
+                      {isActive ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-400">
                           <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-                          Live Contest
+                          Active Contest
                         </span>
                       ) : (
-                        <span className="flex items-center gap-1.5 text-xs font-medium text-amber-300">
-                          <span>🏆</span> Winner Drawn
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold text-rose-400">
+                          <span className="h-2 w-2 rounded-full bg-rose-500" />
+                          Not Active
                         </span>
                       )}
                     </div>
@@ -712,51 +820,193 @@ export default function GiveawaysPage() {
                       </div>
                     </div>
 
-                    {/* Countdown / Status Bar */}
-                    <div className="mt-4 flex items-center justify-between rounded-xl bg-black/25 px-3 py-2 text-xs">
-                      <span className="text-white/45">
-                        {ga.status === "active" && !countdown.isEnded
-                          ? "Ends in"
-                          : "Contest status"}
+                    {/* Winner Display: "Winner : _____ ?" placeholder or announced winner name */}
+                    <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.025] p-3 text-xs">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm">🏆</span>
+                          <span className="font-mono text-xs font-semibold">
+                            Winner :{" "}
+                            {ga.winners && ga.winners.length > 0 ? (
+                              <span className="font-bold text-[#f5dfb0]">
+                                {ga.winners.map((w) => w.user_name).join(", ")}
+                              </span>
+                            ) : (
+                              <span className="font-bold tracking-wider text-amber-200/80">
+                                _____ ?
+                              </span>
+                            )}
+                          </span>
+                        </div>
+
+                        {/* Host Edit Winner Option */}
+                        {isHost && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingWinnerId(editingWinnerId === ga.id ? null : ga.id);
+                              setWinnerInput(ga.winners?.[0]?.user_name ?? "");
+                            }}
+                            className="inline-flex items-center gap-1 rounded-lg border border-[#d6b36a]/40 bg-[#d6b36a]/15 px-2.5 py-1 text-[11px] font-semibold text-[#f0dcae] transition hover:bg-[#d6b36a]/25"
+                          >
+                            <span>✏️</span>
+                            <span>{ga.winners && ga.winners.length > 0 ? "Edit Winner" : "Name Winner"}</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Inline Host Winner Editor */}
+                      {isHost && editingWinnerId === ga.id && (
+                        <div className="mt-3 border-t border-white/10 pt-3">
+                          <label className="block text-[11px] font-medium text-white/75 mb-1.5">
+                            Name or select the winner:
+                          </label>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={winnerInput}
+                              onChange={(e) => setWinnerInput(e.target.value)}
+                              placeholder="Type winner name..."
+                              className="flex-1 rounded-lg border border-white/15 bg-black/40 px-3 py-1.5 text-xs text-white placeholder-white/30 outline-none focus:border-[#d6b36a]"
+                              autoFocus
+                            />
+                            <button
+                              type="button"
+                              disabled={submittingWinner || !winnerInput.trim()}
+                              onClick={() => void handleAnnounceWinner(ga.id)}
+                              className="rounded-lg bg-gradient-to-r from-[#d6b36a] to-[#ebce8e] px-3.5 py-1.5 text-xs font-bold text-[#111111] hover:brightness-110 disabled:opacity-50"
+                            >
+                              {submittingWinner ? "Saving..." : "Save Winner 🏆"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingWinnerId(null)}
+                              className="rounded-lg border border-white/10 px-2.5 py-1.5 text-xs text-white/50 hover:text-white"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+
+                          {/* Quick pick from joined participants */}
+                          {ga.participants && ga.participants.length > 0 && (
+                            <div className="mt-2.5">
+                              <span className="text-[10px] text-white/40 block mb-1">
+                                Quick select from joined members:
+                              </span>
+                              <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
+                                {ga.participants.map((p, idx) => (
+                                  <button
+                                    key={idx}
+                                    type="button"
+                                    onClick={() => setWinnerInput(p.user_name)}
+                                    className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/75 hover:border-[#d6b36a]/50 hover:bg-[#d6b36a]/15 hover:text-[#f5dfb0]"
+                                  >
+                                    + {p.user_name}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Celebration banner for winning user */}
+                      {hasWon && (
+                        <p className="mt-2 text-[11px] font-bold text-emerald-400">
+                          🎉 Congratulations! You are the winner of this giveaway!
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Time Remaining Bar: Shows detailed remaining minutes & seconds */}
+                    <div className="mt-3 flex items-center justify-between rounded-xl bg-black/35 px-3 py-2 text-xs">
+                      <span className="text-white/50">
+                        {isActive ? "⏳ Time Remaining" : "Contest Status"}
                       </span>
                       <span
-                        className={`font-mono font-semibold ${
-                          ga.status === "active" && !countdown.isEnded
-                            ? "text-[#e7ca8d]"
-                            : "text-amber-300"
+                        className={`font-mono text-xs font-semibold ${
+                          isActive ? "text-[#e7ca8d]" : "text-rose-400"
                         }`}
                       >
-                        {ga.status === "active" && !countdown.isEnded
-                          ? countdown.displayText
-                          : "Closed & Awarded"}
+                        {isActive ? countdown.detailedMinutesText : "Contest Closed"}
                       </span>
                     </div>
 
-                    {/* Participants count */}
-                    <p className="mt-2 text-right text-[11px] text-white/45">
-                      👥 {ga.entries_count ?? 0} participants entered
-                    </p>
-
-                    {/* Winner announcement if ended */}
-                    {ga.status === "ended" && ga.winners.length > 0 && (
-                      <div className="mt-4 rounded-xl border border-amber-400/25 bg-amber-400/[0.08] p-3 text-xs">
-                        <p className="font-bold text-amber-300">
-                          🏆 Winning Cinephile:
-                        </p>
-                        <ul className="mt-1 space-y-1 text-white/80">
-                          {ga.winners.map((w, idx) => (
-                            <li key={idx} className="flex items-center gap-1.5 font-medium">
-                              <span>🎉</span> {w.user_name}
-                            </li>
-                          ))}
-                        </ul>
-                        {hasWon && (
-                          <p className="mt-2 font-bold text-emerald-400">
-                            🌟 Congratulations! You won this contest!
-                          </p>
-                        )}
+                    {/* Members Joined Count & Expandable Participant Roster */}
+                    <div className="mt-3 rounded-xl border border-white/[0.06] bg-white/[0.015] p-3 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-white/65">
+                          👥{" "}
+                          <strong className="text-white">
+                            {ga.participants?.length ?? ga.entries_count ?? 0}
+                          </strong>{" "}
+                          {(ga.participants?.length ?? ga.entries_count ?? 0) === 1
+                            ? "member joined"
+                            : "members joined"}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => toggleExpandedParticipants(ga.id)}
+                          className="text-[11px] font-semibold text-[#d6b36a] hover:underline"
+                        >
+                          {expandedParticipants[ga.id]
+                            ? "Hide roster ↑"
+                            : "See who joined ↓"}
+                        </button>
                       </div>
-                    )}
+
+                      {/* Expandable list of who joined */}
+                      {expandedParticipants[ga.id] && (
+                        <div className="mt-2.5 border-t border-white/[0.08] pt-2.5">
+                          {ga.participants && ga.participants.length > 0 ? (
+                            <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                              {ga.participants.map((p, idx) => {
+                                const isUser = currentUserId && p.user_id === currentUserId;
+                                const isWinner = ga.winners?.some(
+                                  (w) =>
+                                    w.user_id === p.user_id ||
+                                    w.user_name.toLowerCase() === p.user_name.toLowerCase()
+                                );
+
+                                return (
+                                  <div
+                                    key={idx}
+                                    className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 text-[11px] ${
+                                      isWinner
+                                        ? "border border-amber-400/40 bg-amber-400/10 text-amber-200"
+                                        : isUser
+                                        ? "border border-emerald-400/30 bg-emerald-400/10 text-emerald-200"
+                                        : "bg-white/[0.03] text-white/75"
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/10 text-[9px] font-bold uppercase text-[#f0dcae]">
+                                        {p.user_name.charAt(0)}
+                                      </span>
+                                      <span className="font-medium">
+                                        {p.user_name}
+                                        {isUser && " (You)"}
+                                      </span>
+                                    </div>
+                                    {isWinner ? (
+                                      <span className="rounded bg-amber-400/20 px-1.5 py-0.5 text-[9px] font-bold text-amber-300">
+                                        🏆 Winner
+                                      </span>
+                                    ) : (
+                                      <span className="text-[10px] text-white/40">Joined</span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <p className="py-1 text-[11px] text-white/40 italic">
+                              No participants have entered yet. Be the first to join!
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
 
                     {/* Action notification */}
                     {actionNotice && actionNotice.id === ga.id && (
@@ -775,7 +1025,7 @@ export default function GiveawaysPage() {
 
                   {/* Actions Bottom */}
                   <div className="mt-6 space-y-2 pt-2">
-                    {ga.status === "active" && !countdown.isEnded ? (
+                    {isActive ? (
                       ga.has_entered ? (
                         <div className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-400/10 py-3 text-xs font-semibold text-emerald-300">
                           <span>✓</span> You&apos;re Entered! Good Luck 🎟️
@@ -799,7 +1049,7 @@ export default function GiveawaysPage() {
                     )}
 
                     {/* Host action: Draw Winner */}
-                    {isHost && ga.status === "active" && (
+                    {isHost && isActive && (
                       <button
                         type="button"
                         onClick={() => void handleDrawWinner(ga.id)}
@@ -808,7 +1058,7 @@ export default function GiveawaysPage() {
                       >
                         {drawingId === ga.id
                           ? "Selecting winner..."
-                          : "🎲 Draw Winner Now"}
+                          : "🎲 Draw Random Winner"}
                       </button>
                     )}
                   </div>

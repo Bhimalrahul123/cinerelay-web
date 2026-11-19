@@ -55,6 +55,32 @@ export async function GET(request: NextRequest) {
 
         if (!error && Array.isArray(data)) {
           dbGiveaways = data as Giveaway[];
+
+          try {
+            const { data: allEntries } = await dbClient
+              .from("giveaway_entries")
+              .select("giveaway_id, user_id, user_name, created_at");
+
+            if (Array.isArray(allEntries)) {
+              const entryMap = new Map<string, { user_id: string; user_name: string; created_at: string }[]>();
+              for (const ent of allEntries) {
+                const list = entryMap.get(ent.giveaway_id) ?? [];
+                list.push({
+                  user_id: ent.user_id,
+                  user_name: ent.user_name || "Participant",
+                  created_at: ent.created_at,
+                });
+                entryMap.set(ent.giveaway_id, list);
+              }
+              for (const ga of dbGiveaways) {
+                const p = entryMap.get(ga.id) ?? [];
+                ga.participants = p;
+                ga.entries_count = Math.max(ga.entries_count ?? 0, p.length);
+              }
+            }
+          } catch {
+            // entries lookup fallback
+          }
         }
       } catch {
         // Fall back to local giveaways
@@ -65,7 +91,7 @@ export async function GET(request: NextRequest) {
     const localList = getLocalGiveaways();
     const combinedMap = new Map<string, Giveaway>();
 
-    // Add local seed/user giveaways
+    // Add local user giveaways
     for (const ga of localList) {
       combinedMap.set(ga.id, ga);
     }
@@ -82,8 +108,8 @@ export async function GET(request: NextRequest) {
     // Check has_entered for each contest
     const enriched = giveaways.map((ga) => {
       let hasEntered = false;
-      if (currentUserId && Array.isArray(ga.winners)) {
-        hasEntered = ga.winners.some((w) => w.user_id === currentUserId);
+      if (currentUserId && Array.isArray(ga.participants)) {
+        hasEntered = ga.participants.some((p) => p.user_id === currentUserId);
       }
       return {
         ...ga,

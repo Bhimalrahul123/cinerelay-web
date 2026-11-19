@@ -27,15 +27,19 @@ export function getLocalGiveaways(): Giveaway[] {
   // Auto-expire and draw winners if end time has arrived
   const now = Date.now();
   for (const ga of list) {
+    const contestEntries = entriesMap[ga.id] ?? [];
     if (ga.status === "active" && new Date(ga.end_time).getTime() <= now) {
-      const contestEntries = entriesMap[ga.id] ?? [];
       const winners = selectFairWinners(contestEntries, ga.winners_count);
       ga.status = "ended";
       ga.winners = winners;
     }
-    // Calculate total entries
-    const count = (entriesMap[ga.id] ?? []).length;
-    ga.entries_count = Math.max(ga.entries_count ?? 0, count);
+    // Calculate total entries and attach participants list
+    ga.entries_count = Math.max(ga.entries_count ?? 0, contestEntries.length);
+    ga.participants = contestEntries.map((e) => ({
+      user_id: e.user_id,
+      user_name: e.user_name || "Participant",
+      created_at: e.created_at,
+    }));
   }
 
   return list;
@@ -108,4 +112,54 @@ export function drawLocalWinner(giveawayId: string): {
   target.winners = winners;
 
   return { success: true, winners };
+}
+
+export function getLocalGiveawayEntries(giveawayId: string): GiveawayEntry[] {
+  const entriesMap = globalThis.__cinerelay_giveaway_entries ?? {};
+  return entriesMap[giveawayId] ?? [];
+}
+
+export function announceLocalGiveawayWinner(
+  giveawayId: string,
+  winnerName: string,
+  hostId?: string
+): { success: boolean; giveaway?: Giveaway; error?: string } {
+  const list = globalThis.__cinerelay_giveaways ?? [];
+  const target = list.find((g) => g.id === giveawayId);
+
+  if (!target) {
+    return { success: false, error: "Giveaway contest not found." };
+  }
+
+  if (hostId && target.host_id && target.host_id !== hostId) {
+    return {
+      success: false,
+      error: "Only the host of this giveaway can announce or edit the winner.",
+    };
+  }
+
+  const trimmedWinner = winnerName.trim();
+  if (!trimmedWinner) {
+    return { success: false, error: "Winner name cannot be empty." };
+  }
+
+  const entriesMap = globalThis.__cinerelay_giveaway_entries ?? {};
+  const contestEntries = entriesMap[giveawayId] ?? [];
+
+  // Match existing participant if possible to preserve user_id
+  const matchedEntry = contestEntries.find(
+    (e) => e.user_name.toLowerCase() === trimmedWinner.toLowerCase()
+  );
+
+  const winnerObject = {
+    user_id: matchedEntry ? matchedEntry.user_id : `winner-${Date.now().toString(36)}`,
+    user_name: trimmedWinner,
+    user_email: matchedEntry?.user_email ?? null,
+    drawn_at: new Date().toISOString(),
+  };
+
+  target.status = "ended";
+  target.winners = [winnerObject];
+
+  return { success: true, giveaway: target };
 }

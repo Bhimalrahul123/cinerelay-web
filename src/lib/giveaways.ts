@@ -22,6 +22,12 @@ export interface GiveawayEntry {
   created_at: string;
 }
 
+export interface GiveawayParticipant {
+  user_id: string;
+  user_name: string;
+  created_at: string;
+}
+
 export interface Giveaway {
   id: string;
   host_id: string;
@@ -42,6 +48,7 @@ export interface Giveaway {
   created_at: string;
   entries_count?: number;
   has_entered?: boolean;
+  participants?: GiveawayParticipant[];
 }
 
 /**
@@ -60,6 +67,7 @@ export function formatTimeRemaining(endTimeIso: string): {
   minutes: number;
   seconds: number;
   displayText: string;
+  detailedMinutesText: string;
 } {
   const diff = new Date(endTimeIso).getTime() - Date.now();
 
@@ -71,6 +79,7 @@ export function formatTimeRemaining(endTimeIso: string): {
       minutes: 0,
       seconds: 0,
       displayText: "Contest Ended",
+      detailedMinutesText: "Contest Ended",
     };
   }
 
@@ -80,12 +89,16 @@ export function formatTimeRemaining(endTimeIso: string): {
   const seconds = Math.floor((diff % (1000 * 60)) / 1000);
 
   let displayText = "";
+  let detailedMinutesText = "";
   if (days > 0) {
     displayText = `${days}d ${hours}h left`;
+    detailedMinutesText = `${days} days, ${hours} hrs, ${minutes} mins left`;
   } else if (hours > 0) {
     displayText = `${hours}h ${minutes}m left`;
+    detailedMinutesText = `${hours} hrs, ${minutes} mins remaining`;
   } else {
     displayText = `${minutes}m ${seconds}s left`;
+    detailedMinutesText = `${minutes} minutes, ${seconds} seconds remaining`;
   }
 
   return {
@@ -95,6 +108,7 @@ export function formatTimeRemaining(endTimeIso: string): {
     minutes,
     seconds,
     displayText,
+    detailedMinutesText,
   };
 }
 
