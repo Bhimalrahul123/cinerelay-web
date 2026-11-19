@@ -1062,19 +1062,21 @@ export default function HomePage() {
             ].map((step) => (
               <div
                 key={step.number}
-                className="group rounded-2xl border border-white/[0.09] bg-white/[0.025] p-7 transition duration-300 hover:border-[#d6b36a]/30 hover:bg-white/[0.04] sm:p-8"
+                className="group flex flex-col justify-between rounded-2xl border border-white/[0.09] bg-white/[0.025] p-7 transition duration-300 hover:border-[#d6b36a]/30 hover:bg-white/[0.04] sm:p-8"
               >
-                <span className="text-sm font-semibold tracking-[0.2em] text-[#d6b36a]">
-                  {step.number}
-                </span>
+                <div>
+                  <span className="text-sm font-semibold tracking-[0.2em] text-[#d6b36a]">
+                    {step.number}
+                  </span>
 
-                <h3 className="mt-6 text-xl font-semibold text-[#fffaf0]">
-                  {step.title}
-                </h3>
+                  <h3 className="mt-6 text-xl font-semibold text-[#fffaf0]">
+                    {step.title}
+                  </h3>
 
-                <p className="mt-3 text-sm leading-7 text-white/65">
-                  {step.description}
-                </p>
+                  <p className="mt-3 text-sm leading-7 text-white/65 min-h-[5.25rem]">
+                    {step.description}
+                  </p>
+                </div>
 
                 <div className="mt-7 h-px w-10 bg-[#d6b36a]/60 transition-all duration-300 group-hover:w-20" />
               </div>
