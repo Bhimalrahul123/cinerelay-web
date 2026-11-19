@@ -286,6 +286,19 @@ export default function SellPage() {
         setMessage("The show date cannot be in the past.");
         return;
       }
+
+      if (showDate === localToday && showTime) {
+        const [h, m] = showTime.split(":").map(Number);
+        const showMinutes = (h || 0) * 60 + (m || 0);
+        const now = new Date();
+        const currentMinutes = now.getHours() * 60 + now.getMinutes();
+        if (showMinutes <= currentMinutes) {
+          setMessage(
+            "The show time for today has already passed. Please select an upcoming show time."
+          );
+          return;
+        }
+      }
     }
 
     const amount = Number(price);
@@ -355,9 +368,9 @@ export default function SellPage() {
           price: amount,
           description: description.trim(),
           evidence_path: filePath,
-          status: "pending",
-          event_date: category === "Movies" ? showDate : null,
-          event_time: category === "Movies" ? showTime : null,
+          status: "approved",
+          event_date: showDate || null,
+          event_time: showTime || null,
           screen_number:
             category === "Movies" ? screenNumber.trim() : null,
           seat_category:
@@ -377,7 +390,7 @@ export default function SellPage() {
       }
 
       setMessage(
-        "Listing and private ticket image saved successfully. Your listing is pending review."
+        "Your ticket has been published live to the CineRelay marketplace! You can now view it on the explore page."
       );
 
       setCategory("Movies");
@@ -456,12 +469,22 @@ export default function SellPage() {
             </span>
           </Link>
 
-          <Link
-            href="/"
-            className="rounded-xl border border-white/10 px-4 py-2.5 text-sm text-white/70 transition hover:border-[#d6b36a]/40 hover:text-white"
-          >
-            ← Marketplace
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/giveaways"
+              className="inline-flex items-center gap-1.5 rounded-full border border-[#d6b36a]/30 bg-[#d6b36a]/10 px-3.5 py-2 text-xs font-semibold text-[#f0dcae] transition hover:bg-[#d6b36a]/20"
+            >
+              <span>🎁</span>
+              Giveaways
+            </Link>
+
+            <Link
+              href="/"
+              className="rounded-xl border border-white/10 px-4 py-2.5 text-sm text-white/70 transition hover:border-[#d6b36a]/40 hover:text-white"
+            >
+              ← Marketplace
+            </Link>
+          </div>
         </header>
 
         <section className="mb-9">
@@ -1028,19 +1051,35 @@ export default function SellPage() {
 
           <section className="rounded-2xl border border-[#d6b36a]/25 bg-[#d6b36a]/[0.045] p-5 sm:p-7">
             <h2 className="text-lg font-semibold text-[#fffaf0]">
-              Ready to submit?
+              Ready to publish?
             </h2>
             <p className="mt-2 text-sm leading-6 text-white/55">
-              Review your information before submitting your listing for review.
+              Review your information. Once submitted, your ticket will be published live to the CineRelay marketplace.
             </p>
 
             {message && (
               <div
                 role="status"
                 aria-live="polite"
-                className="mt-5 break-words rounded-xl border border-white/10 bg-black/20 p-4 text-sm leading-6 text-white/80"
+                className="mt-5 break-words rounded-xl border border-[#d6b36a]/30 bg-[#d6b36a]/[0.08] p-4 text-sm leading-6 text-white/90"
               >
-                {message}
+                <p>{message}</p>
+                {message.includes("published live") && (
+                  <div className="mt-3 flex flex-wrap gap-4 border-t border-white/10 pt-3">
+                    <Link
+                      href="/"
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-[#f0dcae] hover:underline"
+                    >
+                      View on Marketplace →
+                    </Link>
+                    <Link
+                      href="/my-listings"
+                      className="inline-flex items-center gap-1.5 text-xs font-medium text-white/70 hover:text-white"
+                    >
+                      View in My Listings
+                    </Link>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1054,7 +1093,7 @@ export default function SellPage() {
               }
               className="premium-button mt-6 w-full py-4 text-base"
             >
-              {loading ? "Uploading and saving..." : "Submit listing for review"}
+              {loading ? "Uploading and publishing..." : "Publish ticket to marketplace"}
             </button>
 
             <p className="mt-4 text-center text-xs leading-5 text-white/40">

@@ -423,6 +423,13 @@ export default function ProfilePage() {
               Discover
             </Link>
             <Link
+              href="/giveaways"
+              className="inline-flex items-center gap-1.5 rounded-full border border-[#d6b36a]/30 bg-[#d6b36a]/10 px-3 py-1 text-xs font-semibold text-[#f0dcae] transition hover:bg-[#d6b36a]/20"
+            >
+              <span>🎁</span>
+              Giveaways
+            </Link>
+            <Link
               href="/my-listings"
               className="hidden text-sm text-white/70 transition hover:text-[#f0dcae] sm:inline"
             >

@@ -125,7 +125,7 @@ export function normalizeDateStr(dateStr: string | null | undefined): string | n
 export function isTicketExpired(
   eventDate: string | null | undefined,
   eventTime: string | null | undefined,
-  graceMinutes: number = 15
+  graceMinutes: number = 0
 ): boolean {
   const normDate = normalizeDateStr(eventDate);
   if (!normDate) return false;

@@ -752,12 +752,22 @@ export default function CheckoutPage() {
             </span>
           </Link>
 
-          <Link
-            href="/messages"
-            className="rounded-full border border-white/[0.10] px-4 py-2.5 text-xs font-medium text-white/70 transition hover:border-[#d6b36a]/40 hover:text-[#f0dcae] sm:text-sm"
-          >
-            Messages <span aria-hidden="true">↗</span>
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/giveaways"
+              className="inline-flex items-center gap-1.5 rounded-full border border-[#d6b36a]/30 bg-[#d6b36a]/10 px-3 py-1.5 text-xs font-semibold text-[#f0dcae] transition hover:bg-[#d6b36a]/20"
+            >
+              <span>🎁</span>
+              Giveaways
+            </Link>
+
+            <Link
+              href="/messages"
+              className="rounded-full border border-white/[0.10] px-4 py-2.5 text-xs font-medium text-white/70 transition hover:border-[#d6b36a]/40 hover:text-[#f0dcae] sm:text-sm"
+            >
+              Messages <span aria-hidden="true">↗</span>
+            </Link>
+          </div>
         </div>
       </header>
 
