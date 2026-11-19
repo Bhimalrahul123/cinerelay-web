@@ -7,6 +7,7 @@ import {
   getSupabaseServiceRoleKey,
   getSupabaseAnonKey,
 } from "@/lib/env";
+import { getCachedOrder, updateCachedOrder } from "@/lib/orders-store";
 
 export const runtime = "nodejs";
 
@@ -74,19 +75,44 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Query order
-    const { data: order, error } = await dbClient
+    // Query order from database or resilient cache
+    let order: {
+      id: string;
+      status: string;
+      amount_paise: number;
+      expires_at: string;
+      buyer_id: string;
+      seller_id: string;
+      listing_id: string;
+      razorpay_qr_id?: string | null;
+      razorpay_payment_id?: string | null;
+    } | null = null;
+
+    const { data: dbOrder } = await dbClient
       .from("orders")
-      .select("id, status, amount_paise, expires_at, buyer_id, seller_id, listing_id, razorpay_qr_id, razorpay_payment_id")
+      .select(
+        "id, status, amount_paise, expires_at, buyer_id, seller_id, listing_id, razorpay_qr_id, razorpay_payment_id"
+      )
       .eq("id", orderId)
       .maybeSingle();
 
-    if (error) {
-      console.error("Order status lookup query failed:", error);
-      return NextResponse.json(
-        { error: "Could not retrieve order status." },
-        { status: 500 }
-      );
+    if (dbOrder) {
+      order = dbOrder;
+    } else {
+      const cached = getCachedOrder(orderId);
+      if (cached) {
+        order = {
+          id: cached.id,
+          status: cached.status,
+          amount_paise: cached.amount_paise,
+          expires_at: cached.expires_at,
+          buyer_id: cached.buyer_id,
+          seller_id: cached.seller_id,
+          listing_id: cached.listing_id,
+          razorpay_qr_id: cached.razorpay_qr_id || cached.razorpay_order_id,
+          razorpay_payment_id: cached.razorpay_payment_id,
+        };
+      }
     }
 
     if (!order) {
@@ -153,6 +179,11 @@ export async function GET(request: NextRequest) {
           .update({ status: "sold" })
           .eq("id", order.listing_id);
 
+        updateCachedOrder(order.id, {
+          status: "paid",
+          paid_at: new Date().toISOString(),
+        });
+
         return NextResponse.json({
           orderId: order.id,
           status: "paid",
@@ -167,6 +198,8 @@ export async function GET(request: NextRequest) {
         .update({ status: "expired" })
         .eq("id", order.id)
         .eq("status", "pending");
+
+      updateCachedOrder(order.id, { status: "expired" });
 
       if (expireError) {
         console.error("Order expiry update failed:", expireError);
