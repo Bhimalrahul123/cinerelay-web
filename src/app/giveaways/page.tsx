@@ -10,6 +10,74 @@ import {
   formatTimeRemaining,
 } from "@/lib/giveaways";
 
+interface CategoryFieldConfig {
+  titleLabel: string;
+  titlePlaceholder: string;
+  categoryBadge: string;
+  venueLabel: string;
+  venuePlaceholder: string;
+  secondaryLabel: string;
+  secondaryPlaceholder: string;
+  detailsPlaceholder: string;
+  claimPlaceholder: string;
+  valuePlaceholder: string;
+  quickExamples: string[];
+}
+
+const CATEGORY_CONFIG: Record<GiveawayCategory, CategoryFieldConfig> = {
+  "Movie Tickets": {
+    titleLabel: "Movie Ticket Giveaway Title *",
+    titlePlaceholder: "e.g. 2x IMAX 3D Tickets — Deadpool & Wolverine",
+    categoryBadge: "Movie Tickets 🎟️",
+    venueLabel: "Cinema / Theatre (Optional)",
+    venuePlaceholder: "e.g. PVR INOX Forum Mall, Bengaluru",
+    secondaryLabel: "Movie Name (Optional)",
+    secondaryPlaceholder: "e.g. Gladiator II, Interstellar",
+    detailsPlaceholder: "Describe seats, screen format (IMAX/4DX/2D), showtime, and ticket transfer instructions...",
+    claimPlaceholder: "e.g. Digital ticket PDF / barcode will be sent via CineRelay Chat",
+    valuePlaceholder: "e.g. 900",
+    quickExamples: [
+      "🎟️ 2x IMAX 3D Tickets — Gladiator II",
+      "🍿 2x Premium Recliner Passes — Interstellar",
+      "🎬 First Day First Show Movie Passes",
+    ],
+  },
+  "Gift Cards": {
+    titleLabel: "Gift Card / Voucher Title *",
+    titlePlaceholder: "e.g. ₹1,000 BookMyShow E-Gift Voucher",
+    categoryBadge: "Gift Cards 🎁",
+    venueLabel: "Usable Region / Cinemas (Optional)",
+    venuePlaceholder: "e.g. All Theatres Across India (Online Code)",
+    secondaryLabel: "Platform / Brand (Optional)",
+    secondaryPlaceholder: "e.g. BookMyShow, PVR INOX, Cinepolis",
+    detailsPlaceholder: "Describe the voucher value, brand platform, expiry date, and redemption terms...",
+    claimPlaceholder: "e.g. Digital voucher code and secret PIN will be messaged securely via CineRelay Chat",
+    valuePlaceholder: "e.g. 1000",
+    quickExamples: [
+      "🎁 ₹1,000 BookMyShow E-Gift Voucher",
+      "💳 ₹500 PVR Cinemas Digital Gift Card",
+      "🎟️ ₹1,500 Any-Cinema Weekend Voucher",
+    ],
+  },
+  "Events": {
+    titleLabel: "Live Event Pass Title *",
+    titlePlaceholder: "e.g. 2x VIP Passes — Stand-up Comedy Special by Zakir Khan",
+    categoryBadge: "Events 🎪",
+    venueLabel: "Event Venue & City (Optional)",
+    venuePlaceholder: "e.g. Siri Fort Auditorium, New Delhi",
+    secondaryLabel: "Performer / Event Name (Optional)",
+    secondaryPlaceholder: "e.g. Zakir Khan Live, Sunburn Festival",
+    detailsPlaceholder: "Describe the event date & time, pass tier (VIP, Fan Pit, General Entry), and entry requirements...",
+    claimPlaceholder: "e.g. Official event pass QR badge / PDF will be sent via CineRelay Chat",
+    valuePlaceholder: "e.g. 1500",
+    quickExamples: [
+      "🎪 2x Passes — Stand-up Comedy Special by Zakir Khan",
+      "🎵 2x Fanpit Concert Passes — Live Tour",
+      "🎭 VIP Access Pass — Weekend Comedy Festival",
+    ],
+  },
+};
+
 export default function GiveawaysPage() {
   const router = useRouter();
   const [giveaways, setGiveaways] = useState<Giveaway[]>([]);
@@ -778,50 +846,88 @@ export default function GiveawaysPage() {
             </div>
 
             <form onSubmit={handleCreateGiveaway} className="mt-6 space-y-4 text-xs">
+              {/* Category Selector at Top */}
               <div>
-                <label className="mb-1 block font-semibold text-white/70">
-                  Giveaway Title *
+                <label className="mb-2 block font-semibold text-white/80">
+                  Select Prize Category *
                 </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["Movie Tickets", "Gift Cards", "Events"] as GiveawayCategory[]).map((cat) => {
+                    const icons: Record<GiveawayCategory, string> = {
+                      "Movie Tickets": "🎟️",
+                      "Gift Cards": "🎁",
+                      "Events": "🎪",
+                    };
+                    const active = category === cat;
+                    return (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setCategory(cat)}
+                        className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border p-2.5 text-center transition ${
+                          active
+                            ? "border-[#d6b36a] bg-[#d6b36a]/15 text-[#f5dfb0] shadow-sm"
+                            : "border-white/10 bg-white/[0.03] text-white/70 hover:border-white/20 hover:text-white"
+                        }`}
+                      >
+                        <span className="text-lg">{icons[cat]}</span>
+                        <span className="text-[11px] font-bold leading-tight">{cat}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Dynamic Title based on Category */}
+              <div>
+                <div className="mb-1 flex items-center justify-between">
+                  <label className="block font-semibold text-white/80">
+                    {CATEGORY_CONFIG[category]?.titleLabel ?? "Giveaway Title *"}
+                  </label>
+                  <span className="text-[10px] text-[#d6b36a]">
+                    {CATEGORY_CONFIG[category]?.categoryBadge}
+                  </span>
+                </div>
                 <input
                   type="text"
                   required
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g. 2x IMAX 3D Tickets - Deadpool & Wolverine"
-                  className="w-full rounded-xl border border-white/10 bg-white/[0.04] p-3 text-white placeholder-white/30 outline-none focus:border-[#d6b36a]"
+                  placeholder={CATEGORY_CONFIG[category]?.titlePlaceholder}
+                  className="w-full rounded-xl border border-white/10 bg-white/[0.04] p-3 text-white placeholder-white/35 outline-none focus:border-[#d6b36a]"
+                />
+
+                {/* Quick Example Ideas */}
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] text-white/40">Quick ideas:</span>
+                  {CATEGORY_CONFIG[category]?.quickExamples.map((ex) => (
+                    <button
+                      key={ex}
+                      type="button"
+                      onClick={() => setTitle(ex)}
+                      className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-white/70 transition hover:border-[#d6b36a]/50 hover:bg-[#d6b36a]/10 hover:text-[#f5dfb0]"
+                    >
+                      {ex}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Approx Value */}
+              <div>
+                <label className="mb-1 block font-semibold text-white/70">
+                  Approx. Prize Value (₹)
+                </label>
+                <input
+                  type="number"
+                  value={prizeValue}
+                  onChange={(e) => setPrizeValue(e.target.value)}
+                  placeholder={CATEGORY_CONFIG[category]?.valuePlaceholder}
+                  className="w-full rounded-xl border border-white/10 bg-white/[0.04] p-3 text-white placeholder-white/35 outline-none focus:border-[#d6b36a]"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1 block font-semibold text-white/70">
-                    Category *
-                  </label>
-                  <select
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value as GiveawayCategory)}
-                    className="w-full rounded-xl border border-white/10 bg-[#181a1f] p-3 text-white outline-none focus:border-[#d6b36a]"
-                  >
-                    <option value="Movie Tickets">Movie Tickets 🎟️</option>
-                    <option value="Gift Cards">Gift Cards 🎁</option>
-                    <option value="Events">Events 🎪</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="mb-1 block font-semibold text-white/70">
-                    Approx. Prize Value (₹)
-                  </label>
-                  <input
-                    type="number"
-                    value={prizeValue}
-                    onChange={(e) => setPrizeValue(e.target.value)}
-                    placeholder="e.g. 800"
-                    className="w-full rounded-xl border border-white/10 bg-white/[0.04] p-3 text-white placeholder-white/30 outline-none focus:border-[#d6b36a]"
-                  />
-                </div>
-              </div>
-
+              {/* Dynamic Prize Details */}
               <div>
                 <label className="mb-1 block font-semibold text-white/70">
                   Prize Details & Description *
@@ -831,39 +937,41 @@ export default function GiveawaysPage() {
                   rows={3}
                   value={prizeDetails}
                   onChange={(e) => setPrizeDetails(e.target.value)}
-                  placeholder="Describe what the winner will receive (seats, date, voucher platform, terms)..."
-                  className="w-full rounded-xl border border-white/10 bg-white/[0.04] p-3 text-white placeholder-white/30 outline-none focus:border-[#d6b36a]"
+                  placeholder={CATEGORY_CONFIG[category]?.detailsPlaceholder}
+                  className="w-full rounded-xl border border-white/10 bg-white/[0.04] p-3 text-white placeholder-white/35 outline-none focus:border-[#d6b36a]"
                 />
               </div>
 
+              {/* Dynamic Venue and Movie/Platform fields */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="mb-1 block font-semibold text-white/70">
-                    Venue / Cinema (Optional)
+                    {CATEGORY_CONFIG[category]?.venueLabel}
                   </label>
                   <input
                     type="text"
                     value={venue}
                     onChange={(e) => setVenue(e.target.value)}
-                    placeholder="e.g. PVR Forum Mall, Bengaluru"
-                    className="w-full rounded-xl border border-white/10 bg-white/[0.04] p-3 text-white placeholder-white/30 outline-none focus:border-[#d6b36a]"
+                    placeholder={CATEGORY_CONFIG[category]?.venuePlaceholder}
+                    className="w-full rounded-xl border border-white/10 bg-white/[0.04] p-3 text-white placeholder-white/35 outline-none focus:border-[#d6b36a]"
                   />
                 </div>
 
                 <div>
                   <label className="mb-1 block font-semibold text-white/70">
-                    Movie Title (Optional)
+                    {CATEGORY_CONFIG[category]?.secondaryLabel}
                   </label>
                   <input
                     type="text"
                     value={movieTitle}
                     onChange={(e) => setMovieTitle(e.target.value)}
-                    placeholder="e.g. Gladiator II"
-                    className="w-full rounded-xl border border-white/10 bg-white/[0.04] p-3 text-white placeholder-white/30 outline-none focus:border-[#d6b36a]"
+                    placeholder={CATEGORY_CONFIG[category]?.secondaryPlaceholder}
+                    className="w-full rounded-xl border border-white/10 bg-white/[0.04] p-3 text-white placeholder-white/35 outline-none focus:border-[#d6b36a]"
                   />
                 </div>
               </div>
 
+              {/* Duration and Winners */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="mb-1 block font-semibold text-white/70">
@@ -899,6 +1007,7 @@ export default function GiveawaysPage() {
                 </div>
               </div>
 
+              {/* Dynamic Claim Instructions */}
               <div>
                 <label className="mb-1 block font-semibold text-white/70">
                   How Winner Claims (Claim Instructions)
@@ -907,8 +1016,8 @@ export default function GiveawaysPage() {
                   type="text"
                   value={claimInstructions}
                   onChange={(e) => setClaimInstructions(e.target.value)}
-                  placeholder="e.g. Digital ticket barcode will be sent via CineRelay Chat"
-                  className="w-full rounded-xl border border-white/10 bg-white/[0.04] p-3 text-white placeholder-white/30 outline-none focus:border-[#d6b36a]"
+                  placeholder={CATEGORY_CONFIG[category]?.claimPlaceholder}
+                  className="w-full rounded-xl border border-white/10 bg-white/[0.04] p-3 text-white placeholder-white/35 outline-none focus:border-[#d6b36a]"
                 />
               </div>
 
