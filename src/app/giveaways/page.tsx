@@ -546,10 +546,10 @@ export default function GiveawaysPage() {
           <div className="rounded-3xl border border-dashed border-white/15 bg-white/[0.02] p-12 text-center">
             <span className="text-4xl">🎁</span>
             <h3 className="mt-4 text-xl font-semibold text-[#fffaf0]">
-              No giveaway contests found
+              No active giveaways right now
             </h3>
             <p className="mt-2 text-sm text-white/50">
-              There are no matching contests right now. Be the first to host one!
+              Contests will appear here when users host ticket or gift card giveaways. Be the first to create one!
             </p>
             <button
               type="button"
@@ -560,7 +560,7 @@ export default function GiveawaysPage() {
                   setShowHostModal(true);
                 }
               }}
-              className="mt-6 rounded-full bg-[#d6b36a] px-5 py-2.5 text-xs font-bold text-[#111111]"
+              className="mt-6 rounded-full bg-[#d6b36a] px-6 py-2.5 text-xs font-bold text-[#111111] hover:bg-[#e7ca8d] transition"
             >
               + Host a Giveaway
             </button>

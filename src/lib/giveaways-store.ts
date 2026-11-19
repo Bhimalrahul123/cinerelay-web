@@ -13,28 +13,11 @@ declare global {
 }
 
 if (!globalThis.__cinerelay_giveaways) {
-  globalThis.__cinerelay_giveaways = [...SEED_GIVEAWAYS];
+  globalThis.__cinerelay_giveaways = [];
 }
 
 if (!globalThis.__cinerelay_giveaway_entries) {
-  globalThis.__cinerelay_giveaway_entries = {
-    "ga-seed-3": [
-      {
-        id: "entry-seed-1",
-        giveaway_id: "ga-seed-3",
-        user_id: "winner-user-123",
-        user_name: "Vikram Reddy (@vikram_r)",
-        created_at: new Date(Date.now() - 40 * 60 * 60 * 1000).toISOString(),
-      },
-      {
-        id: "entry-seed-2",
-        giveaway_id: "ga-seed-3",
-        user_id: "user-entry-456",
-        user_name: "Sneha Nair",
-        created_at: new Date(Date.now() - 36 * 60 * 60 * 1000).toISOString(),
-      },
-    ],
-  };
+  globalThis.__cinerelay_giveaway_entries = {};
 }
 
 export function getLocalGiveaways(): Giveaway[] {
@@ -60,7 +43,7 @@ export function getLocalGiveaways(): Giveaway[] {
 
 export function addLocalGiveaway(giveaway: Giveaway): void {
   if (!globalThis.__cinerelay_giveaways) {
-    globalThis.__cinerelay_giveaways = [...SEED_GIVEAWAYS];
+    globalThis.__cinerelay_giveaways = [];
   }
   globalThis.__cinerelay_giveaways.unshift(giveaway);
 }

@@ -45,93 +45,10 @@ export interface Giveaway {
 }
 
 /**
- * Seed community giveaways displayed so users always find active contests
- * and inspiration when browsing the giveaways platform.
+ * Initial giveaways list is empty so no fake or unnecessary items are displayed.
+ * Giveaways will only display when real users create and publish them.
  */
-export const SEED_GIVEAWAYS: Giveaway[] = [
-  {
-    id: "ga-seed-1",
-    host_id: "system-host-cinephile-club",
-    host_name: "CineRelay Official",
-    title: "🎟️ 2x IMAX 3D Weekend Tickets — Gladiator II",
-    category: "Movie Tickets",
-    prize_details: "Two prime center recliner tickets at PVR INOX Forum Mall, Bengaluru. Experience the arena in full IMAX glory!",
-    prize_value: 900,
-    venue: "PVR INOX IMAX, Bengaluru",
-    movie_title: "Gladiator II",
-    tmdb_movie_id: 558449,
-    end_time: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(), // 3 days from now
-    winners_count: 1,
-    claim_instructions: "Winner will receive direct digital ticket barcode and seat confirmation via CineRelay Chat.",
-    status: "active",
-    winners: [],
-    created_at: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
-    entries_count: 48,
-  },
-  {
-    id: "ga-seed-2",
-    host_id: "user-host-rahul",
-    host_name: "Rahul Sharma (@cinephile_rahul)",
-    title: "🎁 ₹1,000 BookMyShow E-Gift Voucher",
-    category: "Gift Cards",
-    prize_details: "Unused ₹1,000 BookMyShow digital voucher valid for any cinema, theatre, or live comedy event across India.",
-    prize_value: 1000,
-    venue: "All Theatres Across India (BookMyShow)",
-    movie_title: null,
-    tmdb_movie_id: null,
-    end_time: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(), // 5 days from now
-    winners_count: 2,
-    claim_instructions: "Voucher voucher code and PIN will be messaged securely to the winner right after draw.",
-    status: "active",
-    winners: [],
-    created_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-    entries_count: 73,
-  },
-  {
-    id: "ga-seed-3",
-    host_id: "user-host-anjali",
-    host_name: "Anjali K. (@moviebuff_blr)",
-    title: "🍿 2x Premium Couple Recliner Tickets — Interstellar IMAX Re-Release",
-    category: "Movie Tickets",
-    prize_details: "Bought tickets for Sunday night show but traveling for work. Passing on to a fellow space movie lover!",
-    prize_value: 750,
-    venue: "Cinepolis VIP, Hyderabad",
-    movie_title: "Interstellar",
-    tmdb_movie_id: 157336,
-    end_time: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(), // Ended 4 hours ago
-    winners_count: 1,
-    claim_instructions: "Delivered via CineRelay chat.",
-    status: "ended",
-    winners: [
-      {
-        user_id: "winner-user-123",
-        user_name: "Vikram Reddy (@vikram_r)",
-        drawn_at: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
-      },
-    ],
-    created_at: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
-    entries_count: 64,
-  },
-  {
-    id: "ga-seed-4",
-    host_id: "user-host-kunal",
-    host_name: "Kunal M. (@kunal_delhi)",
-    title: "🎟️ 2x Passes — Stand-up Comedy Special by Zakir Khan",
-    category: "Events",
-    prize_details: "2 General Entry passes for Zakir Khan Live tour at Siri Fort Auditorium. Free contest entry for comedy fans!",
-    prize_value: 1500,
-    venue: "Siri Fort Auditorium, New Delhi",
-    movie_title: null,
-    tmdb_movie_id: null,
-    end_time: new Date(Date.now() + 6 * 24 * 60 * 60 * 1000).toISOString(), // 6 days from now
-    winners_count: 1,
-    claim_instructions: "PDF passes transferred to winner directly on CineRelay.",
-    status: "active",
-    winners: [],
-    created_at: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
-    entries_count: 31,
-  },
-];
+export const SEED_GIVEAWAYS: Giveaway[] = [];
 
 /**
  * Calculates time remaining formatted as a human-readable string.
