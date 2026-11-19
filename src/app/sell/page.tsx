@@ -614,10 +614,10 @@ export default function SellPage() {
                 Movie database
               </p>
               <h2 className="mt-2 text-xl font-semibold text-[#fffaf0]">
-                Find your movie
+                Search your movie title
               </h2>
               <p className="mt-2 text-sm text-white/55">
-                Search TMDB and select the correct movie to fetch posters and synopsis.
+                Type the movie name to search and automatically pull posters and details.
               </p>
 
               <div className="mt-5 flex flex-col gap-3 sm:flex-row">
@@ -641,7 +641,7 @@ export default function SellPage() {
                       void searchMovies();
                     }
                   }}
-                  placeholder="Search movies, e.g. Ranabaali, Gladiator II"
+                  placeholder="Search your movie title (e.g. Interstellar, Ranabaali, Gladiator II)"
                   className={`${inputClass} min-w-0 flex-1`}
                 />
 
@@ -651,7 +651,7 @@ export default function SellPage() {
                   disabled={movieSearchLoading}
                   className="premium-button"
                 >
-                  {movieSearchLoading ? "Searching..." : "Search movies"}
+                  {movieSearchLoading ? "Searching..." : "Search movie"}
                 </button>
               </div>
 

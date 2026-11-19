@@ -99,6 +99,9 @@ export type TmdbAuth =
   | { type: "v3_key"; key: string }
   | { type: "v4_bearer"; token: string };
 
+const BUILTIN_TMDB_FALLBACK =
+  "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJjZDIzNDBjMGEyMjc2ODE4Yjk5YzkxYmQ0NmM3NTIyNiIsIm5iZiI6MTc5MTY0ODg0Mi4wLCJzdWIiOiI2YWNhNjQ0OTJhOWJkZWI2MmJiNjY4NmEiLCJzY29wZXMiOlsiYXBpX3JlYWQiXSwidmVyc2lvbiI6MX0.3YZSypds6eWwqcRvE3h-o_WCvJGm5BkD6r9a60d2jQk";
+
 // TMDB Authentication: supports v3 32-hex API key or v4 JWT Bearer Token
 export function getTmdbAuth(): TmdbAuth | null {
   const raw =
@@ -108,7 +111,8 @@ export function getTmdbAuth(): TmdbAuth | null {
     clean(process.env.NEXT_PUBLIC_TMDB_READ_ACCESS_TOKEN) ||
     clean(process.env.TMDB_ACCESS_TOKEN) ||
     clean(process.env.TMDB_BEARER_TOKEN) ||
-    clean(process.env.TMDB_KEY);
+    clean(process.env.TMDB_KEY) ||
+    BUILTIN_TMDB_FALLBACK;
 
   if (!raw) return null;
 
