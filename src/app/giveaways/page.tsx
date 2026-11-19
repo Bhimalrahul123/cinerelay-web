@@ -24,11 +24,62 @@ interface CategoryFieldConfig {
   quickExamples: string[];
 }
 
+function CategoryIcon({
+  category,
+  className = "h-4 w-4",
+}: {
+  category: string;
+  className?: string;
+}) {
+  const common = {
+    className,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.5,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true as const,
+  };
+
+  switch (category) {
+    case "Movies":
+    case "Movie Tickets":
+      return (
+        <svg {...common}>
+          <rect x="3" y="5" width="18" height="15" rx="2" />
+          <path d="M3 10h18M8 5l-3 5M15 5l-3 5M21 5l-3 5" />
+          <path d="m10 13 5 3-5 3z" fill="currentColor" stroke="none" />
+        </svg>
+      );
+
+    case "Events":
+      return (
+        <svg {...common}>
+          <path d="M4 7a2 2 0 0 0 0 4v2a2 2 0 0 0 0 4h16v-4a2 2 0 0 1 0-4V5H4z" />
+          <path d="M9 8v1M9 12v1M9 16v1M13 9h3M13 13h3M13 17h3" />
+        </svg>
+      );
+
+    case "Gift Cards":
+      return (
+        <svg {...common}>
+          <rect x="3" y="10" width="18" height="11" rx="2" />
+          <path d="M2 7h20v4H2zM12 7v14" />
+          <path d="M12 7H8.5a2.5 2.5 0 1 1 2.5-2.5V7ZM12 7h3.5a2.5 2.5 0 1 0-2.5-2.5V7Z" />
+        </svg>
+      );
+
+    default:
+      return null;
+  }
+}
+
 const CATEGORY_CONFIG: Record<GiveawayCategory, CategoryFieldConfig> = {
   "Movie Tickets": {
     titleLabel: "Movie Ticket Giveaway Title *",
     titlePlaceholder: "e.g. 2x IMAX 3D Tickets — Deadpool & Wolverine",
-    categoryBadge: "Movie Tickets 🎟️",
+    categoryBadge: "Movie Tickets 🎬",
     venueLabel: "Cinema / Theatre (Optional)",
     venuePlaceholder: "e.g. PVR INOX Forum Mall, Bengaluru",
     secondaryLabel: "Movie Name (Optional)",
@@ -37,9 +88,9 @@ const CATEGORY_CONFIG: Record<GiveawayCategory, CategoryFieldConfig> = {
     claimPlaceholder: "e.g. Digital ticket PDF / barcode will be sent via CineRelay Chat",
     valuePlaceholder: "e.g. 900",
     quickExamples: [
-      "🎟️ 2x IMAX 3D Tickets — Gladiator II",
+      "🎬 2x IMAX 3D Tickets — Gladiator II",
       "🍿 2x Premium Recliner Passes — Interstellar",
-      "🎬 First Day First Show Movie Passes",
+      "🎥 First Day First Show Movie Passes",
     ],
   },
   "Gift Cards": {
@@ -62,7 +113,7 @@ const CATEGORY_CONFIG: Record<GiveawayCategory, CategoryFieldConfig> = {
   "Events": {
     titleLabel: "Live Event Pass Title *",
     titlePlaceholder: "e.g. 2x VIP Passes — Stand-up Comedy Special by Zakir Khan",
-    categoryBadge: "Events 🎪",
+    categoryBadge: "Events 🎟️",
     venueLabel: "Event Venue & City (Optional)",
     venuePlaceholder: "e.g. Siri Fort Auditorium, New Delhi",
     secondaryLabel: "Performer / Event Name (Optional)",
@@ -71,7 +122,7 @@ const CATEGORY_CONFIG: Record<GiveawayCategory, CategoryFieldConfig> = {
     claimPlaceholder: "e.g. Official event pass QR badge / PDF will be sent via CineRelay Chat",
     valuePlaceholder: "e.g. 1500",
     quickExamples: [
-      "🎪 2x Passes — Stand-up Comedy Special by Zakir Khan",
+      "🎟️ 2x Passes — Stand-up Comedy Special by Zakir Khan",
       "🎵 2x Fanpit Concert Passes — Live Tour",
       "🎭 VIP Access Pass — Weekend Comedy Festival",
     ],
@@ -638,23 +689,31 @@ export default function GiveawaysPage() {
         <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           {/* Category Tabs */}
           <div className="flex flex-wrap gap-2">
-            {categoryPills.map((cat) => (
-              <button
-                key={cat}
-                type="button"
-                onClick={() => setSelectedCategory(cat)}
-                className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
-                  selectedCategory === cat
-                    ? "bg-[#d6b36a] text-[#111111]"
-                    : "border border-white/10 bg-white/[0.025] text-white/70 hover:border-white/25 hover:text-white"
-                }`}
-              >
-                {cat === "Movie Tickets" && "🎟️ "}
-                {cat === "Gift Cards" && "🎁 "}
-                {cat === "Events" && "🎪 "}
-                {cat}
-              </button>
-            ))}
+            {categoryPills.map((cat) => {
+              const active = selectedCategory === cat;
+              return (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition ${
+                    active
+                      ? "bg-[#d6b36a] text-[#111111]"
+                      : "border border-white/10 bg-white/[0.025] text-white/70 hover:border-white/25 hover:text-white"
+                  }`}
+                >
+                  {cat !== "All" && (
+                    <CategoryIcon
+                      category={cat}
+                      className={`h-3.5 w-3.5 shrink-0 ${
+                        active ? "text-[#111111]" : "text-[#d6b36a]"
+                      }`}
+                    />
+                  )}
+                  <span>{cat}</span>
+                </button>
+              );
+            })}
           </div>
 
           {/* Status & Search Toggle */}
@@ -757,8 +816,9 @@ export default function GiveawaysPage() {
                   <div>
                     {/* Top Badges: Category on left, Active (Green) / Not Active (Red) on right */}
                     <div className="flex items-center justify-between gap-2">
-                      <span className="rounded-full border border-[#d6b36a]/30 bg-[#d6b36a]/[0.08] px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-[#e7ca8d]">
-                        {ga.category}
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-[#d6b36a]/30 bg-[#d6b36a]/[0.08] px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-[#e7ca8d]">
+                        <CategoryIcon category={ga.category} className="h-3 w-3 text-[#d6b36a]" />
+                        <span>{ga.category}</span>
                       </span>
 
                       {isActive ? (
@@ -1103,24 +1163,27 @@ export default function GiveawaysPage() {
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   {(["Movie Tickets", "Gift Cards", "Events"] as GiveawayCategory[]).map((cat) => {
-                    const icons: Record<GiveawayCategory, string> = {
-                      "Movie Tickets": "🎟️",
-                      "Gift Cards": "🎁",
-                      "Events": "🎪",
-                    };
                     const active = category === cat;
                     return (
                       <button
                         key={cat}
                         type="button"
                         onClick={() => setCategory(cat)}
-                        className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border p-2.5 text-center transition ${
+                        className={`flex flex-col items-center justify-center gap-2 rounded-xl border p-3 text-center transition ${
                           active
                             ? "border-[#d6b36a] bg-[#d6b36a]/15 text-[#f5dfb0] shadow-sm"
                             : "border-white/10 bg-white/[0.03] text-white/70 hover:border-white/20 hover:text-white"
                         }`}
                       >
-                        <span className="text-lg">{icons[cat]}</span>
+                        <div
+                          className={`flex h-9 w-9 items-center justify-center rounded-xl ${
+                            active
+                              ? "bg-[#d6b36a]/25 text-[#f5dfb0]"
+                              : "bg-white/[0.06] text-white/70"
+                          }`}
+                        >
+                          <CategoryIcon category={cat} className="h-5 w-5" />
+                        </div>
                         <span className="text-[11px] font-bold leading-tight">{cat}</span>
                       </button>
                     );
