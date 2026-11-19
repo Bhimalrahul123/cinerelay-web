@@ -62,6 +62,8 @@ function CategoryIcon({
       );
 
     case "Gift Cards":
+    case "Giveaways":
+    case "Giveaway":
       return (
         <svg {...common}>
           <rect x="3" y="10" width="18" height="11" rx="2" />
@@ -71,7 +73,13 @@ function CategoryIcon({
       );
 
     default:
-      return null;
+      return (
+        <svg {...common}>
+          <rect x="3" y="10" width="18" height="11" rx="2" />
+          <path d="M2 7h20v4H2zM12 7v14" />
+          <path d="M12 7H8.5a2.5 2.5 0 1 1 2.5-2.5V7ZM12 7h3.5a2.5 2.5 0 1 0-2.5-2.5V7Z" />
+        </svg>
+      );
   }
 }
 
