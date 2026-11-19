@@ -12,6 +12,8 @@ export const runtime = "nodejs";
 interface ListingRow {
   id: string;
   title: string;
+  category?: string | null;
+  description?: string | null;
   event_date: string | null;
   event_time: string | null;
   status: string;
@@ -63,12 +65,11 @@ async function handleCleanup() {
       // RPC not configured yet; continue to direct check below
     }
 
-    // 2. Fetch all approved listings with an event date
+    // 2. Fetch all approved listings
     const { data: candidateListings, error: fetchErr } = await dbClient
       .from("listings")
-      .select("id, title, event_date, event_time, status")
-      .eq("status", "approved")
-      .not("event_date", "is", null);
+      .select("id, title, category, description, event_date, event_time, status")
+      .eq("status", "approved");
 
     if (fetchErr) {
       console.error("Cleanup-expired fetch error:", fetchErr);
@@ -82,7 +83,15 @@ async function handleCleanup() {
     const expiredIds: string[] = [];
 
     for (const item of rows) {
-      if (isTicketExpired(item.event_date, item.event_time)) {
+      if (
+        isTicketExpired(
+          item.event_date,
+          item.event_time,
+          0,
+          item.description,
+          item.category
+        )
+      ) {
         expiredIds.push(item.id);
       }
     }

@@ -208,7 +208,16 @@ export default function ListingDetailsPage() {
           setListing(loadedListing);
 
           // If event show date/time has passed, trigger automatic status update
-          if (loadedListing && isTicketExpired(loadedListing.event_date, loadedListing.event_time)) {
+          if (
+            loadedListing &&
+            isTicketExpired(
+              loadedListing.event_date,
+              loadedListing.event_time,
+              0,
+              loadedListing.description,
+              loadedListing.category
+            )
+          ) {
             void supabase
               .from("listings")
               .update({ status: "expired" })
