@@ -595,11 +595,16 @@ export default function SellPage() {
                 }}
                 placeholder={
                   category === "Movies"
-                    ? "Choose a movie below"
+                    ? "Enter movie title (e.g. Ranabaali), or search below"
                     : "Enter your ticket title"
                 }
                 className={inputClass}
               />
+              {category === "Movies" && (
+                <p className="mt-1.5 text-xs text-white/40">
+                  Tip: You can type your movie title directly here, or search TMDB below to auto-load official movie posters.
+                </p>
+              )}
             </div>
           </section>
 
@@ -612,7 +617,7 @@ export default function SellPage() {
                 Find your movie
               </h2>
               <p className="mt-2 text-sm text-white/55">
-                Search TMDB and select the correct movie.
+                Search TMDB and select the correct movie to fetch posters and synopsis.
               </p>
 
               <div className="mt-5 flex flex-col gap-3 sm:flex-row">
@@ -636,7 +641,7 @@ export default function SellPage() {
                       void searchMovies();
                     }
                   }}
-                  placeholder="Search movies, e.g. Interstellar"
+                  placeholder="Search movies, e.g. Ranabaali, Gladiator II"
                   className={`${inputClass} min-w-0 flex-1`}
                 />
 
@@ -651,9 +656,24 @@ export default function SellPage() {
               </div>
 
               {movieSearchError && (
-                <p role="status" className="mt-3 text-sm text-amber-200">
-                  {movieSearchError}
-                </p>
+                <div className="mt-3 rounded-xl border border-amber-400/20 bg-amber-400/[0.08] p-3 text-xs leading-5 text-amber-200">
+                  <p>{movieSearchError}</p>
+                  {movieQuery.trim().length > 0 && (
+                    <div className="mt-2.5 flex flex-wrap items-center gap-2 border-t border-amber-400/20 pt-2">
+                      <span className="text-white/70">Proceed with this movie name:</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTitle(movieQuery.trim());
+                          setMovieSearchError("");
+                        }}
+                        className="rounded-lg border border-[#d6b36a]/40 bg-[#d6b36a]/20 px-3 py-1 font-semibold text-[#f0dcae] hover:bg-[#d6b36a]/30 transition"
+                      >
+                        Use &quot;{movieQuery.trim()}&quot; as listing title →
+                      </button>
+                    </div>
+                  )}
+                </div>
               )}
 
               {movieResults.length > 0 && (

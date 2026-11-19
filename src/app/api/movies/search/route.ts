@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         error:
-          "Movie search service is not configured on the server. Please configure TMDB_READ_ACCESS_TOKEN or TMDB_API_KEY.",
+          "TMDB movie search is not configured in Vercel environment variables. You can enter your movie title directly in 'Listing title' above to publish!",
         results: [],
         page: 1,
         totalPages: 0,
